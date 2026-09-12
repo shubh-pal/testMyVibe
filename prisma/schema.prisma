@@ -86,10 +86,17 @@ model StepResult {
 
 // A concrete audit finding: something missing, broken, or a gap in the
 // codebase, discovered by reading the source.
+//
+// Lifecycle: pending (just reported) -> approved | rejected (human decides on
+// the kanban board) -> in_progress (an AI claimed it via claim_next_issue) ->
+// in_review (AI submitted a fix via submit_issue_resolution) -> done (human
+// confirms on the board). A rejected fix in review can be sent back to
+// approved to try again.
 model Issue {
   id          String   @id @default(cuid())
   runId       String
   run         Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
+  projectId   String? // denormalized from run.flow.projectId for fast board queries
   severity    String // critical | high | medium | low
   category    String // missing-navigation | broken-link | validation | error-handling | auth | api-mismatch | accessibility | other
   title       String
@@ -98,5 +105,10 @@ model Issue {
   filePath    String?
   lineStart   Int?
   stepOrder   Int?
+  status         String    @default("pending") // pending | approved | rejected | in_progress | in_review | done
+  pickedAt       DateTime?
+  resolutionNotes String? // what the AI changed, reported via submit_issue_resolution
+  reviewNotes     String? // human notes when reviewing/closing
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }

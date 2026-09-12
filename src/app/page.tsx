@@ -3,125 +3,125 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
-interface ProjectListItem {
-  id: string;
-  name: string;
-  repoPath: string | null;
-  repoUrl: string | null;
-  createdAt: string;
-  flows: { id: string }[];
+interface Stats {
+  projectCount: number;
+  flowCount: number;
+  runCount: number;
+  issueCounts: Record<string, number>;
+  recentIssues: {
+    id: string;
+    title: string;
+    severity: string;
+    status: string;
+    createdAt: string;
+    projectId: string;
+    projectName: string;
+    flowName: string;
+  }[];
 }
 
-export default function Home() {
-  const [projects, setProjects] = useState<ProjectListItem[] | null>(null);
-  const [name, setName] = useState("");
-  const [repoPath, setRepoPath] = useState("");
-  const [repoUrl, setRepoUrl] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+const severityColor: Record<string, string> = {
+  critical: "bg-red-500/15 text-red-400",
+  high: "bg-orange-500/15 text-orange-400",
+  medium: "bg-amber-500/15 text-amber-400",
+  low: "bg-neutral-500/15 text-neutral-400",
+};
 
-  async function load() {
-    const res = await fetch("/api/projects");
-    setProjects(await res.json());
-  }
+const statusColor: Record<string, string> = {
+  pending: "bg-neutral-500/15 text-neutral-400",
+  approved: "bg-blue-500/15 text-blue-400",
+  rejected: "bg-red-500/15 text-red-400",
+  in_progress: "bg-amber-500/15 text-amber-400",
+  in_review: "bg-purple-500/15 text-purple-400",
+  done: "bg-emerald-500/15 text-emerald-400",
+};
+
+export default function OrgDashboard() {
+  const [stats, setStats] = useState<Stats | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      const res = await fetch("/api/stats");
+      if (res.ok && !cancelled) setStats(await res.json());
+    }
     load();
+    const i = setInterval(load, 8000);
+    return () => {
+      cancelled = true;
+      clearInterval(i);
+    };
   }, []);
 
-  async function createProject(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    if (!name.trim() || (!repoPath.trim() && !repoUrl.trim())) {
-      setError("Give it a name and a local path or GitHub URL");
-      return;
-    }
-    setCreating(true);
-    try {
-      const res = await fetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, repoPath: repoPath || undefined, repoUrl: repoUrl || undefined }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "failed");
-      setName("");
-      setRepoPath("");
-      setRepoUrl("");
-      await load();
-      window.location.href = `/projects/${data.id}`;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setCreating(false);
-    }
-  }
+  if (!stats) return <p className="text-neutral-500 text-sm">Loading…</p>;
+
+  const openIssues =
+    (stats.issueCounts.pending ?? 0) +
+    (stats.issueCounts.approved ?? 0) +
+    (stats.issueCounts.in_progress ?? 0) +
+    (stats.issueCounts.in_review ?? 0);
 
   return (
     <div className="flex flex-col gap-8">
-      <div>
-        <h1 className="text-2xl font-semibold">Projects</h1>
-        <p className="text-neutral-400 mt-1 max-w-2xl">
-          Connect a codebase, then point your own Claude session (Claude Code / Desktop) at its MCP
-          endpoint. Claude reads the real source, discovers user flows (Login, Signup, Checkout...),
-          checks each step against the code, and reports issues here — each with a ready-to-paste fix
-          prompt. Nothing runs in a browser.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Org dashboard</h1>
+          <p className="text-neutral-500 text-sm mt-1">Everything across all your connected projects.</p>
+        </div>
+        <Link href="/projects" className="btn-primary">
+          Manage projects
+        </Link>
       </div>
 
-      <form onSubmit={createProject} className="card flex flex-col gap-3">
-        <div>
-          <label className="block text-xs text-neutral-400 mb-1">Project name</label>
-          <input className="input" placeholder="My SaaS" value={name} onChange={(e) => setName(e.target.value)} />
-        </div>
-        <div className="grid sm:grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs text-neutral-400 mb-1">Local repo path</label>
-            <input
-              className="input"
-              placeholder="/Users/you/Projects/myapp"
-              value={repoPath}
-              onChange={(e) => setRepoPath(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-neutral-400 mb-1">GitHub repo URL</label>
-            <input
-              className="input"
-              placeholder="https://github.com/you/myapp"
-              value={repoUrl}
-              onChange={(e) => setRepoUrl(e.target.value)}
-            />
-          </div>
-        </div>
-        <p className="text-xs text-neutral-600">
-          These are just context shown to the connecting AI — at least one is required.
-        </p>
-        <div>
-          <button className="btn-primary" disabled={creating} type="submit">
-            {creating ? "Creating…" : "+ New project"}
-          </button>
-        </div>
-      </form>
-      {error && <p className="text-red-400 text-sm -mt-4">{error}</p>}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <StatCard label="Projects" value={stats.projectCount} />
+        <StatCard label="Flows" value={stats.flowCount} />
+        <StatCard label="Audit runs" value={stats.runCount} />
+        <StatCard label="Open issues" value={openIssues} accent="text-amber-400" />
+      </div>
 
-      <div className="grid sm:grid-cols-2 gap-4">
-        {projects === null && <p className="text-neutral-500 text-sm">Loading…</p>}
-        {projects?.length === 0 && (
-          <p className="text-neutral-500 text-sm">No projects yet — create one above to get started.</p>
-        )}
-        {projects?.map((p) => (
-          <Link key={p.id} href={`/projects/${p.id}`} className="card hover:border-indigo-500/50 transition-colors">
-            <div className="flex items-start justify-between">
-              <div>
-                <h2 className="font-medium">{p.name}</h2>
-                <p className="text-sm text-neutral-500 mt-0.5">{p.repoPath || p.repoUrl}</p>
-              </div>
-              <span className="badge bg-neutral-800 text-neutral-300">{p.flows.length} flow(s)</span>
-            </div>
-          </Link>
+      <div className="grid sm:grid-cols-6 gap-3">
+        {["pending", "approved", "in_progress", "in_review", "done", "rejected"].map((s) => (
+          <div key={s} className="card text-center py-4">
+            <p className="text-2xl font-semibold">{stats.issueCounts[s] ?? 0}</p>
+            <p className={`badge mt-2 ${statusColor[s]}`}>{s.replace("_", " ")}</p>
+          </div>
         ))}
       </div>
+
+      <div>
+        <h2 className="font-medium text-lg mb-3">Recent issues</h2>
+        {stats.recentIssues.length === 0 && <p className="text-neutral-500 text-sm">No issues reported yet.</p>}
+        <div className="flex flex-col gap-2">
+          {stats.recentIssues.map((issue) => (
+            <Link
+              key={issue.id}
+              href={`/projects/${issue.projectId}/issues?issue=${issue.id}`}
+              className="card flex items-center justify-between hover:border-indigo-500/50"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <span className={`badge ${severityColor[issue.severity]}`}>{issue.severity}</span>
+                <span className="font-medium truncate">{issue.title}</span>
+              </div>
+              <div className="flex items-center gap-3 shrink-0 text-xs text-neutral-500">
+                <span>
+                  {issue.projectName} · {issue.flowName}
+                </span>
+                <span className={`badge ${statusColor[issue.status]}`}>{issue.status.replace("_", " ")}</span>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ label, value, accent }: { label: string; value: number; accent?: string }) {
+  return (
+    <div className="card">
+      <p className={`text-3xl font-semibold ${accent ?? ""}`}>{value}</p>
+      <p className="text-sm text-neutral-500 mt-1">{label}</p>
     </div>
   );
 }

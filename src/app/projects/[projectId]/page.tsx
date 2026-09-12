@@ -2,319 +2,133 @@
 
 import { useEffect, useState, use as usePromise } from "react";
 import Link from "next/link";
-import { otherTemplates, type StepDef } from "@/lib/steps";
 
-interface FlowListItem {
-  id: string;
-  name: string;
-  description: string | null;
-  source: string;
-  _count: { runs: number };
-}
-
-interface ProjectDetail {
+interface ProjectInfo {
   id: string;
   name: string;
   repoPath: string | null;
   repoUrl: string | null;
-  mcpToken: string;
-  flows: FlowListItem[];
 }
 
-export default function ProjectPage({ params }: { params: Promise<{ projectId: string }> }) {
-  const { projectId } = usePromise(params);
-  const [project, setProject] = useState<ProjectDetail | null>(null);
-  const [showBuilder, setShowBuilder] = useState(false);
+interface Stats {
+  flowCount: number;
+  runCount: number;
+  totalIssues: number;
+  issueCounts: Record<string, number>;
+  recentRuns: { id: string; status: string; startedAt: string; flowName: string; issueCount: number }[];
+}
 
-  async function load() {
-    const res = await fetch(`/api/projects/${projectId}`);
-    if (res.ok) setProject(await res.json());
-  }
+const statusColor: Record<string, string> = {
+  pending: "bg-neutral-500/15 text-neutral-400",
+  approved: "bg-blue-500/15 text-blue-400",
+  rejected: "bg-red-500/15 text-red-400",
+  in_progress: "bg-amber-500/15 text-amber-400",
+  in_review: "bg-purple-500/15 text-purple-400",
+  done: "bg-emerald-500/15 text-emerald-400",
+  passed: "bg-emerald-500/10 text-emerald-400",
+  failed: "bg-red-500/10 text-red-400",
+  running: "bg-amber-500/10 text-amber-400",
+};
+
+export default function ProjectDashboard({ params }: { params: Promise<{ projectId: string }> }) {
+  const { projectId } = usePromise(params);
+  const [project, setProject] = useState<ProjectInfo | null>(null);
+  const [stats, setStats] = useState<Stats | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      const [pRes, sRes] = await Promise.all([
+        fetch(`/api/projects/${projectId}`),
+        fetch(`/api/projects/${projectId}/stats`),
+      ]);
+      if (cancelled) return;
+      if (pRes.ok) setProject(await pRes.json());
+      if (sRes.ok) setStats(await sRes.json());
+    }
     load();
-    const interval = setInterval(load, 4000);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const i = setInterval(load, 6000);
+    return () => {
+      cancelled = true;
+      clearInterval(i);
+    };
   }, [projectId]);
 
-  if (!project) return <p className="text-neutral-500 text-sm">Loading…</p>;
+  if (!project || !stats) return <p className="text-neutral-500 text-sm">Loading…</p>;
+
+  const openIssues =
+    (stats.issueCounts.pending ?? 0) +
+    (stats.issueCounts.approved ?? 0) +
+    (stats.issueCounts.in_progress ?? 0) +
+    (stats.issueCounts.in_review ?? 0);
+  const resolved = stats.issueCounts.done ?? 0;
 
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <Link href="/" className="text-sm text-neutral-500 hover:text-neutral-300">
-          ← Projects
-        </Link>
-        <h1 className="text-2xl font-semibold mt-1">{project.name}</h1>
+        <h1 className="text-2xl font-semibold">{project.name}</h1>
         <p className="text-neutral-500 text-sm">{project.repoPath || project.repoUrl}</p>
       </div>
 
-      <ConnectPanel project={project} onTokenChanged={load} />
-
-      <div className="flex items-center justify-between">
-        <h2 className="font-medium text-lg">Flows</h2>
-        <button className="btn-secondary" onClick={() => setShowBuilder((v) => !v)}>
-          {showBuilder ? "Close" : "+ Add flow manually"}
-        </button>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <StatCard label="Flows" value={stats.flowCount} />
+        <StatCard label="Audit runs" value={stats.runCount} />
+        <StatCard label="Open issues" value={openIssues} accent="text-amber-400" />
+        <StatCard label="Resolved" value={resolved} accent="text-emerald-400" />
       </div>
 
-      {showBuilder && (
-        <FlowBuilder
-          projectId={projectId}
-          onCreated={() => {
-            setShowBuilder(false);
-            load();
-          }}
-        />
-      )}
-
-      <div className="grid sm:grid-cols-2 gap-4">
-        {project.flows.length === 0 && (
-          <p className="text-neutral-500 text-sm">
-            No flows yet. Connect the MCP endpoint above and ask your AI to audit this codebase — it will
-            discover flows automatically. Or add one manually above.
-          </p>
-        )}
-        {project.flows.map((f) => (
+      <div className="grid sm:grid-cols-6 gap-3">
+        {["pending", "approved", "in_progress", "in_review", "done", "rejected"].map((s) => (
           <Link
-            key={f.id}
-            href={`/projects/${projectId}/flows/${f.id}`}
-            className="card hover:border-indigo-500/50 transition-colors"
+            key={s}
+            href={`/projects/${projectId}/issues`}
+            className="card text-center py-4 hover:border-indigo-500/50"
           >
-            <div className="flex items-start justify-between">
-              <h3 className="font-medium">{f.name}</h3>
-              {f.source === "ai-discovered" && (
-                <span className="badge bg-indigo-500/10 text-indigo-300 text-[10px]">AI-discovered</span>
-              )}
-            </div>
-            {f.description && <p className="text-sm text-neutral-500 mt-0.5">{f.description}</p>}
-            <p className="text-xs text-neutral-600 mt-2">{f._count.runs} audit run(s)</p>
+            <p className="text-2xl font-semibold">{stats.issueCounts[s] ?? 0}</p>
+            <p className={`badge mt-2 ${statusColor[s]}`}>{s.replace("_", " ")}</p>
           </Link>
         ))}
       </div>
-    </div>
-  );
-}
 
-function ConnectPanel({ project, onTokenChanged }: { project: ProjectDetail; onTokenChanged: () => void }) {
-  const [origin, setOrigin] = useState("");
-  const [copied, setCopied] = useState<string | null>(null);
-  const [regenerating, setRegenerating] = useState(false);
-
-  useEffect(() => setOrigin(window.location.origin), []);
-
-  const mcpUrl = `${origin}/api/mcp`;
-  const cliCommand = `claude mcp add --transport http testmyvibe ${mcpUrl} --header "Authorization: Bearer ${project.mcpToken}"`;
-
-  async function copy(key: string, text: string) {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(key);
-      setTimeout(() => setCopied(null), 1500);
-    } catch {
-      // ignore
-    }
-  }
-
-  async function regenerate() {
-    if (!confirm("Regenerate the MCP token? Anything already connected with the old token will stop working.")) return;
-    setRegenerating(true);
-    try {
-      await fetch(`/api/projects/${project.id}/regenerate-token`, { method: "POST" });
-      onTokenChanged();
-    } finally {
-      setRegenerating(false);
-    }
-  }
-
-  return (
-    <div className="card flex flex-col gap-3">
-      <h2 className="font-medium">Connect your AI</h2>
-      <p className="text-sm text-neutral-400">
-        Add this as an MCP server in Claude Code, Claude Desktop, or any MCP-compatible client, then ask
-        it to audit this codebase. It will read the code at{" "}
-        <span className="text-neutral-300">{project.repoPath || project.repoUrl}</span> and report flows
-        and issues here.
-      </p>
-
-      <div>
-        <label className="block text-xs text-neutral-400 mb-1">Claude Code CLI</label>
-        <div className="flex gap-2">
-          <code className="input flex-1 overflow-x-auto whitespace-nowrap font-mono text-xs">{cliCommand}</code>
-          <button className="btn-secondary text-xs" onClick={() => copy("cli", cliCommand)}>
-            {copied === "cli" ? "Copied!" : "Copy"}
-          </button>
-        </div>
-      </div>
-
-      <div className="grid sm:grid-cols-[1fr_auto] gap-2 items-end">
+      <div className="grid sm:grid-cols-2 gap-8">
         <div>
-          <label className="block text-xs text-neutral-400 mb-1">MCP server URL</label>
-          <code className="input block overflow-x-auto whitespace-nowrap font-mono text-xs">{mcpUrl}</code>
-        </div>
-        <button className="btn-secondary text-xs" onClick={() => copy("url", mcpUrl)}>
-          {copied === "url" ? "Copied!" : "Copy"}
-        </button>
-      </div>
-
-      <div className="grid sm:grid-cols-[1fr_auto] gap-2 items-end">
-        <div>
-          <label className="block text-xs text-neutral-400 mb-1">Auth token (Bearer)</label>
-          <code className="input block overflow-x-auto whitespace-nowrap font-mono text-xs">{project.mcpToken}</code>
-        </div>
-        <button className="btn-secondary text-xs" onClick={() => copy("token", project.mcpToken)}>
-          {copied === "token" ? "Copied!" : "Copy"}
-        </button>
-      </div>
-
-      <div>
-        <button className="btn-danger text-xs" onClick={regenerate} disabled={regenerating}>
-          {regenerating ? "Regenerating…" : "Regenerate token"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function FlowBuilder({ projectId, onCreated }: { projectId: string; onCreated: () => void }) {
-  const templates = otherTemplates();
-  const [mode, setMode] = useState<"template" | "custom">("template");
-  const [selectedTemplate, setSelectedTemplate] = useState(0);
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [steps, setSteps] = useState<StepDef[]>([]);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (mode === "template") {
-      const t = templates[selectedTemplate];
-      setName(t.name);
-      setDescription(t.description);
-      setSteps(t.steps);
-    } else {
-      setName("");
-      setDescription("");
-      setSteps([{ order: 0, description: "User visits the home page" }]);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, selectedTemplate]);
-
-  function updateStep(i: number, patch: Partial<StepDef>) {
-    setSteps((s) => s.map((step, idx) => (idx === i ? { ...step, ...patch } : step)));
-  }
-
-  function addStep() {
-    setSteps((s) => [...s, { order: s.length, description: "" }]);
-  }
-
-  function removeStep(i: number) {
-    setSteps((s) => s.filter((_, idx) => idx !== i).map((step, idx) => ({ ...step, order: idx })));
-  }
-
-  async function save() {
-    setError(null);
-    if (!name.trim() || steps.length === 0 || steps.some((s) => !s.description.trim())) {
-      setError("Give the flow a name and fill in every step's description");
-      return;
-    }
-    setSaving(true);
-    try {
-      const res = await fetch(`/api/projects/${projectId}/flows`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, description, steps, source: "manual" }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error ?? "failed");
-      onCreated();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="card flex flex-col gap-5">
-      <div className="flex gap-2">
-        <button
-          className={mode === "template" ? "btn-primary" : "btn-secondary"}
-          onClick={() => setMode("template")}
-        >
-          From template
-        </button>
-        <button className={mode === "custom" ? "btn-primary" : "btn-secondary"} onClick={() => setMode("custom")}>
-          Custom
-        </button>
-      </div>
-
-      {mode === "template" && (
-        <div className="flex flex-wrap gap-2">
-          {templates.map((t, i) => (
-            <button
-              key={t.name}
-              onClick={() => setSelectedTemplate(i)}
-              className={`badge border ${
-                i === selectedTemplate
-                  ? "border-indigo-400 bg-indigo-500/10 text-indigo-300"
-                  : "border-neutral-700 text-neutral-400"
-              }`}
-            >
-              {t.name}
-            </button>
-          ))}
-        </div>
-      )}
-
-      <div className="grid sm:grid-cols-2 gap-3">
-        <div>
-          <label className="block text-xs text-neutral-400 mb-1">Flow name</label>
-          <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
-        </div>
-        <div>
-          <label className="block text-xs text-neutral-400 mb-1">Description</label>
-          <input className="input" value={description} onChange={(e) => setDescription(e.target.value)} />
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-3">
-        <div className="flex items-center justify-between">
-          <label className="text-xs text-neutral-400">Steps (plain English — the AI will verify these against the code)</label>
-          <button className="btn-secondary text-xs" onClick={addStep}>
-            + Add step
-          </button>
-        </div>
-        {steps.map((step, i) => (
-          <div key={i} className="rounded-lg border border-neutral-800 p-3 flex flex-col gap-2">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-neutral-500 w-5">{i + 1}.</span>
-              <input
-                className="input flex-1"
-                placeholder="What the user does, e.g. 'User clicks Login'"
-                value={step.description}
-                onChange={(e) => updateStep(i, { description: e.target.value })}
-              />
-              <button className="btn-danger text-xs" onClick={() => removeStep(i)}>
-                Remove
-              </button>
-            </div>
-            <input
-              className="input ml-7"
-              placeholder="Expected outcome (optional), e.g. 'Redirected to /login'"
-              value={step.expectedOutcome ?? ""}
-              onChange={(e) => updateStep(i, { expectedOutcome: e.target.value })}
-            />
+          <h2 className="font-medium text-lg mb-3">Recent audit runs</h2>
+          {stats.recentRuns.length === 0 && <p className="text-neutral-500 text-sm">No runs yet.</p>}
+          <div className="flex flex-col gap-2">
+            {stats.recentRuns.map((r) => (
+              <Link key={r.id} href={`/runs/${r.id}`} className="card flex items-center justify-between hover:border-indigo-500/50">
+                <div className="flex items-center gap-3">
+                  <span className={`badge ${statusColor[r.status]}`}>{r.status}</span>
+                  <span className="text-sm">{r.flowName}</span>
+                </div>
+                <span className="text-xs text-neutral-500">{r.issueCount} issue(s)</span>
+              </Link>
+            ))}
           </div>
-        ))}
-      </div>
+        </div>
 
-      {error && <p className="text-red-400 text-sm">{error}</p>}
-      <div>
-        <button className="btn-primary" onClick={save} disabled={saving}>
-          {saving ? "Saving…" : "Save flow"}
-        </button>
+        <div className="card flex flex-col gap-3">
+          <h2 className="font-medium">Quick links</h2>
+          <Link href={`/projects/${projectId}/issues`} className="btn-secondary text-sm justify-start">
+            🗂️ Open the issues board
+          </Link>
+          <Link href={`/projects/${projectId}/flows`} className="btn-secondary text-sm justify-start">
+            🧭 View flows
+          </Link>
+          <Link href={`/projects/${projectId}/settings`} className="btn-secondary text-sm justify-start">
+            ⚙️ MCP connection settings
+          </Link>
+        </div>
       </div>
+    </div>
+  );
+}
+
+function StatCard({ label, value, accent }: { label: string; value: number; accent?: string }) {
+  return (
+    <div className="card">
+      <p className={`text-3xl font-semibold ${accent ?? ""}`}>{value}</p>
+      <p className="text-sm text-neutral-500 mt-1">{label}</p>
     </div>
   );
 }

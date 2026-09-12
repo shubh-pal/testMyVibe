@@ -33,7 +33,22 @@ Workflow:
    until you've covered the app's main journeys, or the user says to stop.
 
 Be concrete: every issue must point at real code, and every fixPrompt must be something a coding
-agent could act on without re-discovering the bug itself.`;
+agent could act on without re-discovering the bug itself.
+
+Issues you report always start as "pending" — a human reviews them on the TestMyVibe kanban board
+and approves or rejects each one. You never fix an issue right after reporting it in the same breath;
+fixing happens in a separate FIX MODE, only for issues a human has already approved.
+
+FIX MODE — when the user asks you to "work through approved issues", "pick up the queue", etc.:
+1. Call claim_next_issue. It atomically claims the oldest "approved" issue for this project and
+   moves it to "in_progress" so no one else picks it up twice. If it returns none, there's nothing
+   approved to work on right now — stop and say so.
+2. Actually make the fix in the codebase using the returned fixPrompt/description/filePath as your
+   starting point — read the surrounding code first, don't apply the prompt blindly.
+3. Call submit_issue_resolution with what you changed (files touched, a short summary). This moves
+   the issue to "in_review" for a human to confirm on the board.
+4. Loop back to step 1 for the next approved issue, until claim_next_issue returns none or the user
+   says to stop.`;
 
 async function getProjectForToken(token: string) {
   const project = await prisma.project.findUnique({ where: { mcpToken: token } });
@@ -185,10 +200,11 @@ export function createMcpServer(token: string) {
       },
     },
     async (input) => {
-      await requireRunForToken(input.runId, token);
+      const run = await requireRunForToken(input.runId, token);
       const issue = await prisma.issue.create({
         data: {
           runId: input.runId,
+          projectId: run.flow.projectId,
           severity: input.severity,
           category: input.category,
           title: input.title,
@@ -197,9 +213,88 @@ export function createMcpServer(token: string) {
           filePath: input.filePath ?? null,
           lineStart: input.lineStart ?? null,
           stepOrder: input.stepOrder ?? null,
+          status: "pending",
         },
       });
-      return { content: [{ type: "text", text: JSON.stringify({ issueId: issue.id }) }] };
+      return { content: [{ type: "text", text: JSON.stringify({ issueId: issue.id, status: "pending" }) }] };
+    }
+  );
+
+  server.registerTool(
+    "claim_next_issue",
+    {
+      title: "Claim the next approved issue to fix",
+      description:
+        "Atomically claim the oldest 'approved' issue for this project (moving it to 'in_progress') so you can fix it. Returns null if there's nothing approved right now. Use in FIX MODE only, never right after reporting an issue.",
+      inputSchema: {},
+    },
+    async () => {
+      const project = await getProjectForToken(token);
+      // Best-effort atomic claim: SQLite serializes writes, so a findFirst + update
+      // pair here is safe enough for a single-writer dev setup.
+      const next = await prisma.issue.findFirst({
+        where: { projectId: project.id, status: "approved" },
+        orderBy: { createdAt: "asc" },
+        include: { run: { include: { flow: true } } },
+      });
+      if (!next) {
+        return { content: [{ type: "text", text: JSON.stringify({ issue: null }) }] };
+      }
+      const { count } = await prisma.issue.updateMany({
+        where: { id: next.id, status: "approved" },
+        data: { status: "in_progress", pickedAt: new Date() },
+      });
+      if (count === 0) {
+        // Someone else claimed it between findFirst and update — tell the caller to retry.
+        return { content: [{ type: "text", text: JSON.stringify({ issue: null, note: "contention, try again" }) }] };
+      }
+      const claimed = next;
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                issue: {
+                  id: claimed.id,
+                  severity: next.severity,
+                  category: next.category,
+                  title: next.title,
+                  description: next.description,
+                  fixPrompt: next.fixPrompt,
+                  filePath: next.filePath,
+                  lineStart: next.lineStart,
+                  flowName: next.run.flow.name,
+                },
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    }
+  );
+
+  server.registerTool(
+    "submit_issue_resolution",
+    {
+      title: "Submit a fix for review",
+      description: "Report that you finished fixing a claimed issue. Moves it to 'in_review' for a human to confirm.",
+      inputSchema: {
+        issueId: z.string(),
+        resolutionNotes: z.string().describe("What you changed — files touched and a short summary"),
+      },
+    },
+    async ({ issueId, resolutionNotes }) => {
+      const project = await getProjectForToken(token);
+      const issue = await prisma.issue.findUnique({ where: { id: issueId } });
+      if (!issue || issue.projectId !== project.id) throw new Error("Issue not found for this project");
+      await prisma.issue.update({
+        where: { id: issueId },
+        data: { status: "in_review", resolutionNotes },
+      });
+      return { content: [{ type: "text", text: JSON.stringify({ ok: true, status: "in_review" }) }] };
     }
   );
 

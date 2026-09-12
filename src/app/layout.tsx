@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import AppShell from "@/components/AppShell";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -20,16 +21,8 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col bg-neutral-950 text-neutral-100">
-        <header className="border-b border-neutral-800">
-          <div className="mx-auto max-w-6xl px-6 py-4 flex items-center justify-between">
-            <a href="/" className="font-semibold text-lg tracking-tight">
-              🧪 TestMyVibe
-            </a>
-            <span className="text-xs text-neutral-500">test-case generator & flow auditor</span>
-          </div>
-        </header>
-        <main className="mx-auto max-w-6xl px-6 py-8 w-full flex-1">{children}</main>
+      <body className="min-h-full bg-neutral-950 text-neutral-100">
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );

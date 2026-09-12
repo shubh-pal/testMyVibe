@@ -55,8 +55,8 @@ export default function FlowPage({ params }: { params: Promise<{ projectId: stri
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <Link href={`/projects/${projectId}`} className="text-sm text-neutral-500 hover:text-neutral-300">
-          ← {flow.project.name}
+        <Link href={`/projects/${projectId}/flows`} className="text-sm text-neutral-500 hover:text-neutral-300">
+          ← {flow.project.name} flows
         </Link>
         <div className="flex items-center gap-2 mt-1">
           <h1 className="text-2xl font-semibold">{flow.name}</h1>

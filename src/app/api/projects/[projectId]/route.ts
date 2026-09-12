@@ -11,6 +11,21 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
   return NextResponse.json(project);
 }
 
+export async function PATCH(req: Request, { params }: { params: Promise<{ projectId: string }> }) {
+  const { projectId } = await params;
+  const body = await req.json();
+  const { name, repoPath, repoUrl } = body as { name?: string; repoPath?: string | null; repoUrl?: string | null };
+  const project = await prisma.project.update({
+    where: { id: projectId },
+    data: {
+      ...(name !== undefined ? { name } : {}),
+      ...(repoPath !== undefined ? { repoPath: repoPath || null } : {}),
+      ...(repoUrl !== undefined ? { repoUrl: repoUrl || null } : {}),
+    },
+  });
+  return NextResponse.json(project);
+}
+
 export async function DELETE(_req: Request, { params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
   await prisma.project.delete({ where: { id: projectId } });
