@@ -1,0 +1,102 @@
+// TestMyVibe data model (MCP-based static audit)
+//
+// A Project represents a codebase. It exposes an MCP endpoint (auth'd by
+// mcpToken) that the user's own Claude session (Claude Code/Desktop) connects
+// to. That Claude session reads the real source code, discovers user flows,
+// and reports back:
+//   - Flows (a named journey, e.g. "Login") made of plain-English Steps
+//   - Runs (one audit pass over a Flow)
+//   - Issues found during that audit, each with a ready-to-paste fixPrompt
+//
+// Nothing here executes code or drives a browser — all reasoning happens in
+// the connecting AI session; this app is just the durable store + dashboard.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Project {
+  id        String   @id @default(cuid())
+  name      String
+  repoPath  String? // local filesystem path, e.g. /Users/you/Projects/myapp
+  repoUrl   String? // GitHub repo URL, e.g. https://github.com/you/myapp
+  mcpToken  String   @unique @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  flows Flow[]
+}
+
+model Flow {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  source      String   @default("manual") // "manual" | "ai-discovered"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  steps Step[]
+  runs  Run[]
+}
+
+// A plain-English step in a user journey, e.g.:
+//   order: 0, description: "User visits the home page"
+//   order: 1, description: "User clicks the Login button/link"
+//   order: 2, expectedOutcome: "Redirected to /login"
+// The connecting AI verifies each step against the actual source (routes,
+// components, links) rather than executing anything.
+model Step {
+  id             String  @id @default(cuid())
+  flowId         String
+  flow           Flow    @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  order          Int
+  description    String
+  expectedOutcome String?
+}
+
+model Run {
+  id         String    @id @default(cuid())
+  flowId     String
+  flow       Flow      @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  status     String // running | passed | failed
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  summary    String? // JSON-encoded summary counts, optionally free-text notes from the AI
+
+  stepResults StepResult[]
+  issues      Issue[]
+}
+
+model StepResult {
+  id       String  @id @default(cuid())
+  runId    String
+  run      Run     @relation(fields: [runId], references: [id], onDelete: Cascade)
+  order    Int
+  description String
+  status   String // verified | missing | partial
+  notes    String? // what the AI found in the code (file references, reasoning)
+}
+
+// A concrete audit finding: something missing, broken, or a gap in the
+// codebase, discovered by reading the source.
+model Issue {
+  id          String   @id @default(cuid())
+  runId       String
+  run         Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
+  severity    String // critical | high | medium | low
+  category    String // missing-navigation | broken-link | validation | error-handling | auth | api-mismatch | accessibility | other
+  title       String
+  description String
+  fixPrompt   String // ready-to-paste prompt for a coding agent
+  filePath    String?
+  lineStart   Int?
+  stepOrder   Int?
+  createdAt   DateTime @default(now())
+}
