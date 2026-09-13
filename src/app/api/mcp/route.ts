@@ -14,18 +14,28 @@ function extractToken(req: Request): string | null {
 async function handle(req: Request): Promise<Response> {
   const token = extractToken(req);
   if (!token) {
-    return new Response(JSON.stringify({ error: "Missing MCP token. Pass it as a Bearer token or ?token=" }), {
-      status: 401,
-      headers: { "content-type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({
+        error: "Missing MCP token. Pass it as a Bearer token or ?token=",
+      }),
+      {
+        status: 401,
+        headers: { "content-type": "application/json" },
+      },
+    );
   }
 
-  const project = await prisma.project.findUnique({ where: { mcpToken: token } });
+  const project = await prisma.project.findUnique({
+    where: { mcpToken: token },
+  });
   if (!project) {
-    return new Response(JSON.stringify({ error: "Invalid or revoked MCP token" }), {
-      status: 401,
-      headers: { "content-type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({ error: "Invalid or revoked MCP token" }),
+      {
+        status: 401,
+        headers: { "content-type": "application/json" },
+      },
+    );
   }
 
   // Stateless mode: a fresh server + transport per request. Cheap for SQLite-backed

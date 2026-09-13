@@ -1,13 +1,23 @@
+import { authorize } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-export async function GET(_req: Request, { params }: { params: Promise<{ projectId: string }> }) {
+export async function GET(
+  _req: Request,
+  { params }: { params: Promise<{ projectId: string }> },
+) {
+  const denied = await authorize(_req);
+  if (denied) return denied;
   const { projectId } = await params;
 
   const [flowCount, runCount, issuesByStatus, recentRuns] = await Promise.all([
     prisma.flow.count({ where: { projectId } }),
     prisma.run.count({ where: { flow: { projectId } } }),
-    prisma.issue.groupBy({ by: ["status"], where: { projectId }, _count: { _all: true } }),
+    prisma.issue.groupBy({
+      by: ["status"],
+      where: { projectId },
+      _count: { _all: true },
+    }),
     prisma.run.findMany({
       where: { flow: { projectId } },
       orderBy: { startedAt: "desc" },

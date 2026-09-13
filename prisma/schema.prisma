@@ -1,8 +1,8 @@
 // TestMyVibe data model (MCP-based static audit)
 //
 // A Project represents a codebase. It exposes an MCP endpoint (auth'd by
-// mcpToken) that the user's own Claude session (Claude Code/Desktop) connects
-// to. That Claude session reads the real source code, discovers user flows,
+// mcpToken) that the user's own MCP-compatible AI coding session connects
+// to. That AI session reads the real source code, discovers user flows,
 // and reports back:
 //   - Flows (a named journey, e.g. "Login") made of plain-English Steps
 //   - Runs (one audit pass over a Flow)
@@ -23,13 +23,23 @@ datasource db {
 model Project {
   id        String   @id @default(cuid())
   name      String
-  repoPath  String? // local filesystem path, e.g. /Users/you/Projects/myapp
-  repoUrl   String? // GitHub repo URL, e.g. https://github.com/you/myapp
+  // Retained only for backwards-compatible reads of projects created before
+  // MCP-first onboarding. New projects never collect or expose these values.
+  repoPath  String?
+  repoUrl   String?
+  autoApproveIssues Boolean @default(false)
+  autoCloseIssues Boolean @default(false)
   mcpToken  String   @unique @default(cuid())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  flows Flow[]
+  workspaceId   String?
+  workspace     Workspace?     @relation(fields: [workspaceId], references: [id])
+  flows         Flow[]
+  graph         GraphState?
+  graphNodes    GraphNode[]
+  graphEdges    GraphEdge[]
+  graphJourneys GraphJourney[]
 }
 
 model Flow {
@@ -42,8 +52,9 @@ model Flow {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  steps Step[]
-  runs  Run[]
+  graphJourney GraphJourney?
+  steps        Step[]
+  runs         Run[]
 }
 
 // A plain-English step in a user journey, e.g.:
@@ -53,11 +64,11 @@ model Flow {
 // The connecting AI verifies each step against the actual source (routes,
 // components, links) rather than executing anything.
 model Step {
-  id             String  @id @default(cuid())
-  flowId         String
-  flow           Flow    @relation(fields: [flowId], references: [id], onDelete: Cascade)
-  order          Int
-  description    String
+  id              String  @id @default(cuid())
+  flowId          String
+  flow            Flow    @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  order           Int
+  description     String
   expectedOutcome String?
 }
 
@@ -70,18 +81,20 @@ model Run {
   finishedAt DateTime?
   summary    String? // JSON-encoded summary counts, optionally free-text notes from the AI
 
-  stepResults StepResult[]
-  issues      Issue[]
+  graphRevision String?
+  evidenceType  String       @default("source")
+  stepResults   StepResult[]
+  issues        Issue[]
 }
 
 model StepResult {
-  id       String  @id @default(cuid())
-  runId    String
-  run      Run     @relation(fields: [runId], references: [id], onDelete: Cascade)
-  order    Int
+  id          String  @id @default(cuid())
+  runId       String
+  run         Run     @relation(fields: [runId], references: [id], onDelete: Cascade)
+  order       Int
   description String
-  status   String // verified | missing | partial
-  notes    String? // what the AI found in the code (file references, reasoning)
+  status      String // verified | missing | partial
+  notes       String? // what the AI found in the code (file references, reasoning)
 }
 
 // A concrete audit finding: something missing, broken, or a gap in the
@@ -93,22 +106,107 @@ model StepResult {
 // confirms on the board). A rejected fix in review can be sent back to
 // approved to try again.
 model Issue {
-  id          String   @id @default(cuid())
-  runId       String
-  run         Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
-  projectId   String? // denormalized from run.flow.projectId for fast board queries
-  severity    String // critical | high | medium | low
-  category    String // missing-navigation | broken-link | validation | error-handling | auth | api-mismatch | accessibility | other
-  title       String
-  description String
-  fixPrompt   String // ready-to-paste prompt for a coding agent
-  filePath    String?
-  lineStart   Int?
-  stepOrder   Int?
-  status         String    @default("pending") // pending | approved | rejected | in_progress | in_review | done
-  pickedAt       DateTime?
+  id              String    @id @default(cuid())
+  runId           String
+  run             Run       @relation(fields: [runId], references: [id], onDelete: Cascade)
+  projectId       String? // denormalized from run.flow.projectId for fast board queries
+  severity        String // critical | high | medium | low
+  category        String // missing-navigation | broken-link | validation | error-handling | auth | api-mismatch | accessibility | other
+  title           String
+  description     String
+  fixPrompt       String // ready-to-paste prompt for a coding agent
+  filePath        String?
+  lineStart       Int?
+  stepOrder       Int?
+  status          String    @default("pending") // pending | approved | rejected | in_progress | in_review | done
+  pickedAt        DateTime?
   resolutionNotes String? // what the AI changed, reported via submit_issue_resolution
   reviewNotes     String? // human notes when reviewing/closing
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model Workspace {
+  id       String    @id @default(cuid())
+  name     String
+  users    User[]
+  projects Project[]
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+  workspaceId  String
+  workspace    Workspace @relation(fields: [workspaceId], references: [id])
+  sessions     Session[]
+}
+
+model Session {
+  id        String   @id
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+}
+
+model GraphState {
+  projectId           String    @id
+  project             Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  version             Int       @default(0)
+  revision            String    @default("")
+  revisionCommittedAt DateTime?
+  lastAuditedRevision String?
+  lastAuditedCommitAt DateTime?
+  lastAuditedAt       DateTime?
+  frontier            String    @default("[]")
+  discoveryStatus     String    @default("pending")
+  leaseRunId          String?
+  leaseUntil          DateTime?
+  updatedAt           DateTime  @updatedAt
+}
+
+model GraphNode {
+  id         String  @id @default(cuid())
+  projectId  String
+  project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  key        String
+  label      String
+  kind       String
+  group      String
+  sourceRefs String
+  revision   String
+
+  @@unique([projectId, key])
+  @@index([projectId, group])
+}
+
+model GraphEdge {
+  id         String  @id @default(cuid())
+  projectId  String
+  project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  key        String
+  fromKey    String
+  toKey      String
+  label      String
+  sourceRefs String
+  revision   String
+
+  @@unique([projectId, key])
+}
+
+model GraphJourney {
+  id        String    @id @default(cuid())
+  projectId String
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  key       String
+  flowId    String    @unique
+  flow      Flow      @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  edgeKeys  String
+  status    String    @default("pending")
+  revision  String
+  auditedAt DateTime?
+
+  @@unique([projectId, key])
+  @@index([projectId, status])
 }

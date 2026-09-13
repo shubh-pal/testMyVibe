@@ -1,7 +1,13 @@
+import { authorize } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-export async function GET(_req: Request, { params }: { params: Promise<{ runId: string }> }) {
+export async function GET(
+  _req: Request,
+  { params }: { params: Promise<{ runId: string }> },
+) {
+  const denied = await authorize(_req);
+  if (denied) return denied;
   const { runId } = await params;
   const run = await prisma.run.findUnique({
     where: { id: runId },

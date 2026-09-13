@@ -15,12 +15,16 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "TestMyVibe",
-  description: "Generate test flows, run them against your app, and get an audit report with fix prompts.",
+  description:
+    "Discover user flows, audit source code, and review human-approved AI fixes in a private workspace.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+    <html
+      lang="en"
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+    >
       <body className="min-h-full bg-neutral-950 text-neutral-100">
         <AppShell>{children}</AppShell>
       </body>

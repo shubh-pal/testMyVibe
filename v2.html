@@ -1,0 +1,1098 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TestMyVibe — Ship with confidence</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --ink: #111536;
+      --muted: #596080;
+      --purple: #6046e9;
+      --purple-dark: #4933c7;
+      --lavender: #eeeaff;
+      --blue: #e9f5ff;
+      --green: #20b486;
+      --border: #e3e3f5;
+      --white: #ffffff;
+    }
+
+    body {
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 75% 15%, #e9e5ff 0, transparent 32%),
+        radial-gradient(circle at 10% 45%, #f1f8ff 0, transparent 28%),
+        #fff;
+      overflow-x: hidden;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    button {
+      font: inherit;
+      cursor: pointer;
+    }
+
+    /* ---------------- NAV ---------------- */
+
+    nav {
+      width: min(1380px, calc(100% - 80px));
+      margin: 0 auto;
+      height: 92px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 800;
+      font-size: 22px;
+      letter-spacing: -0.5px;
+    }
+
+    .logo-mark {
+      width: 38px;
+      height: 38px;
+      border-radius: 11px;
+      display: grid;
+      place-items: center;
+      color: white;
+      font-size: 21px;
+      background: linear-gradient(135deg, #7458ff, #5135d7);
+      box-shadow: 0 8px 20px rgba(96, 70, 233, .25);
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 42px;
+      margin-left: 70px;
+      color: #30365b;
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .nav-right {
+      display: flex;
+      align-items: center;
+      gap: 28px;
+      font-size: 14px;
+    }
+
+    .github {
+      font-weight: 600;
+    }
+
+    .open-app {
+      border: 0;
+      color: white;
+      background: linear-gradient(135deg, #6549ed, #5436d8);
+      padding: 13px 21px;
+      border-radius: 13px;
+      font-weight: 700;
+      box-shadow: 0 10px 25px rgba(96,70,233,.2);
+    }
+
+    /* ---------------- HERO ---------------- */
+
+    .hero {
+      width: min(1380px, calc(100% - 80px));
+      margin: 40px auto 0;
+      min-height: 590px;
+      display: grid;
+      grid-template-columns: 43% 57%;
+      align-items: center;
+      position: relative;
+    }
+
+    .hero-copy {
+      position: relative;
+      z-index: 5;
+      padding-left: 5px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #eeeaff;
+      border: 1px solid #ded6ff;
+      color: #6649dc;
+      padding: 9px 16px;
+      border-radius: 30px;
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 25px;
+    }
+
+    h1 {
+      font-size: clamp(52px, 5.1vw, 76px);
+      line-height: .96;
+      letter-spacing: -4.5px;
+      max-width: 680px;
+      margin-bottom: 27px;
+    }
+
+    h1 span {
+      color: #6145df;
+    }
+
+    .hero-description {
+      max-width: 580px;
+      color: #424866;
+      font-size: 20px;
+      line-height: 1.5;
+      margin-bottom: 28px;
+    }
+
+    .hero-actions {
+      display: flex;
+      gap: 14px;
+      margin-bottom: 27px;
+    }
+
+    .primary-btn,
+    .secondary-btn {
+      border-radius: 14px;
+      padding: 16px 25px;
+      font-weight: 700;
+      font-size: 15px;
+    }
+
+    .primary-btn {
+      color: white;
+      border: 0;
+      background: linear-gradient(135deg, #6046e9, #5237d5);
+      box-shadow: 0 12px 30px rgba(96,70,233,.22);
+    }
+
+    .secondary-btn {
+      background: white;
+      border: 1.5px solid #8875ed;
+      color: #4f3bc9;
+    }
+
+    .checks {
+      display: flex;
+      gap: 23px;
+      color: #555b78;
+      font-size: 13px;
+    }
+
+    .checks span::before {
+      content: "✓";
+      color: #5c49df;
+      font-weight: 900;
+      margin-right: 8px;
+    }
+
+    /* ---------------- DASHBOARD ---------------- */
+
+    .hero-visual {
+      position: relative;
+      height: 590px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .orb {
+      position: absolute;
+      width: 720px;
+      height: 720px;
+      border-radius: 50%;
+      background: radial-gradient(
+        circle,
+        rgba(126,105,245,.17),
+        rgba(126,105,245,.06) 45%,
+        transparent 68%
+      );
+    }
+
+    .dashboard {
+      position: relative;
+      z-index: 2;
+      width: 770px;
+      transform: rotate(-2deg);
+      border-radius: 18px;
+      overflow: hidden;
+      background: #141a27;
+      border: 1px solid #aeb4d8;
+      box-shadow:
+        0 35px 80px rgba(35,28,92,.25),
+        0 10px 25px rgba(45,38,100,.15);
+    }
+
+    .window-bar {
+      height: 38px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 0 14px;
+      background: #111724;
+      border-bottom: 1px solid #2a3244;
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #555d70;
+    }
+
+    .window-content {
+      display: grid;
+      grid-template-columns: 135px 1fr;
+      min-height: 420px;
+    }
+
+    .dash-sidebar {
+      padding: 20px 13px;
+      background: #182130;
+      border-right: 1px solid #293244;
+    }
+
+    .dash-logo {
+      color: white;
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 22px;
+    }
+
+    .workspace {
+      font-size: 9px;
+      color: #79849a;
+      margin-bottom: 5px;
+    }
+
+    .workspace-box {
+      background: #202a3a;
+      border: 1px solid #344057;
+      border-radius: 5px;
+      padding: 7px;
+      color: white;
+      font-size: 9px;
+      margin-bottom: 25px;
+    }
+
+    .side-item {
+      color: #8d98ad;
+      font-size: 10px;
+      padding: 9px 8px;
+      border-radius: 5px;
+      margin-bottom: 3px;
+    }
+
+    .side-item.active {
+      color: white;
+      background: #28569d;
+    }
+
+    .dash-main {
+      padding: 22px;
+      background: #151b27;
+    }
+
+    .dash-title {
+      color: white;
+      font-size: 19px;
+      font-weight: 700;
+      margin-bottom: 5px;
+    }
+
+    .dash-sub {
+      color: #778197;
+      font-size: 9px;
+      margin-bottom: 18px;
+    }
+
+    .dash-stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .stat {
+      background: #1d2635;
+      border: 1px solid #2b3548;
+      border-radius: 7px;
+      padding: 13px;
+    }
+
+    .stat strong {
+      display: block;
+      color: white;
+      font-size: 20px;
+      margin-bottom: 3px;
+    }
+
+    .stat small {
+      color: #8490a5;
+      font-size: 8px;
+    }
+
+    .stat.green strong {
+      color: #20c89a;
+    }
+
+    .stat.yellow strong {
+      color: #f3bd18;
+    }
+
+    .status-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+
+    .status {
+      background: #1c2534;
+      border-radius: 6px;
+      text-align: center;
+      padding: 9px 4px;
+      color: white;
+      font-size: 12px;
+    }
+
+    .status label {
+      display: block;
+      font-size: 7px;
+      color: #778399;
+      margin-top: 4px;
+    }
+
+    .audit-title {
+      color: white;
+      font-size: 11px;
+      margin-bottom: 9px;
+    }
+
+    .audit {
+      height: 31px;
+      background: #1d2635;
+      border: 1px solid #2b3547;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      color: #d4d9e5;
+      font-size: 8px;
+      margin-bottom: 6px;
+    }
+
+    .passed {
+      color: #17c697;
+      background: rgba(20,195,150,.12);
+      padding: 4px 7px;
+      border-radius: 4px;
+      margin-right: 9px;
+    }
+
+    /* ---------------- FLOATING NOTES ---------------- */
+
+    .annotation {
+      position: absolute;
+      z-index: 5;
+      padding: 12px 17px;
+      background: white;
+      color: #4935c3;
+      border-radius: 15px;
+      font-size: 13px;
+      font-weight: 700;
+      box-shadow: 0 12px 30px rgba(50,40,110,.12);
+      border: 1px solid #ddd7fb;
+    }
+
+    .note-one {
+      right: -20px;
+      top: 48px;
+      transform: rotate(-4deg);
+    }
+
+    .note-two {
+      right: -45px;
+      top: 255px;
+      background: #f5dcff;
+      transform: rotate(-5deg);
+    }
+
+    .note-three {
+      right: 5px;
+      bottom: 45px;
+      background: #eee5ff;
+      transform: rotate(-5deg);
+    }
+
+    .hand-note {
+      position: absolute;
+      left: -25px;
+      bottom: 120px;
+      width: 120px;
+      font-family: "Comic Sans MS", cursive;
+      font-size: 15px;
+      line-height: 1.15;
+      transform: rotate(-8deg);
+      color: #1e2350;
+    }
+
+    /* ---------------- METRICS ---------------- */
+
+    .metrics {
+      display: flex;
+      gap: 38px;
+      margin-top: 32px;
+    }
+
+    .metric {
+      padding-right: 38px;
+      border-right: 1px solid #dfe0ed;
+    }
+
+    .metric:last-child {
+      border: 0;
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 29px;
+      letter-spacing: -1px;
+    }
+
+    .metric span {
+      font-size: 12px;
+      color: #69708c;
+    }
+
+    /* ---------------- FEATURES ---------------- */
+
+    .features {
+      width: min(1380px, calc(100% - 80px));
+      margin: 40px auto 0;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+    }
+
+    .feature {
+      border: 1px solid #e0e1f1;
+      border-radius: 15px;
+      padding: 25px;
+      background: rgba(255,255,255,.8);
+      transition: .25s ease;
+    }
+
+    .feature:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 15px 35px rgba(72,57,145,.09);
+    }
+
+    .feature-icon {
+      width: 48px;
+      height: 48px;
+      display: grid;
+      place-items: center;
+      border-radius: 12px;
+      background: #eee7ff;
+      color: #6845e6;
+      font-size: 23px;
+      margin-bottom: 18px;
+    }
+
+    .feature:nth-child(2) .feature-icon {
+      background: #dff3ff;
+      color: #1687d6;
+    }
+
+    .feature:nth-child(3) .feature-icon {
+      background: #dcf9ee;
+      color: #16a47c;
+    }
+
+    .feature:nth-child(4) .feature-icon {
+      background: #ffe7df;
+      color: #df5741;
+    }
+
+    .feature h3 {
+      font-size: 17px;
+      margin-bottom: 7px;
+    }
+
+    .feature p {
+      color: #69708b;
+      line-height: 1.45;
+      font-size: 13px;
+    }
+
+    /* ---------------- TOOLS ---------------- */
+
+    .tools {
+      width: min(1380px, calc(100% - 80px));
+      margin: 38px auto 70px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 30px;
+    }
+
+    .tool-label {
+      color: #9ba0b8;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      margin-bottom: 15px;
+    }
+
+    .tool-list {
+      display: flex;
+      align-items: center;
+      gap: 30px;
+      color: #3f4565;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .tool {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .tool-icon {
+      width: 20px;
+      height: 20px;
+      display: grid;
+      place-items: center;
+      border-radius: 5px;
+      background: #eeeaff;
+      color: #5940d9;
+      font-size: 10px;
+    }
+
+    .opensource {
+      background: linear-gradient(100deg, #f0efff, #f5f3ff);
+      border-radius: 16px;
+      padding: 20px 25px;
+      min-width: 500px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 30px;
+    }
+
+    .opensource strong {
+      display: block;
+      font-size: 17px;
+      margin-bottom: 4px;
+    }
+
+    .opensource p {
+      color: #6d7189;
+      font-size: 12px;
+    }
+
+    .star {
+      background: white;
+      border: 1px solid #dedaf5;
+      padding: 11px 18px;
+      border-radius: 25px;
+      white-space: nowrap;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    /* ---------------- RESPONSIVE ---------------- */
+
+    @media (max-width: 1100px) {
+      .nav-links {
+        display: none;
+      }
+
+      .hero {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-copy {
+        text-align: center;
+      }
+
+      .hero-description {
+        margin-left: auto;
+        margin-right: auto;
+      }
+
+      .hero-actions,
+      .checks,
+      .metrics {
+        justify-content: center;
+      }
+
+      .hero-visual {
+        margin-top: 30px;
+      }
+
+      .features {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .tools {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .opensource {
+        min-width: 0;
+      }
+    }
+
+    @media (max-width: 700px) {
+      nav,
+      .hero,
+      .features,
+      .tools {
+        width: min(100% - 30px, 1380px);
+      }
+
+      nav {
+        height: 75px;
+      }
+
+      .github {
+        display: none;
+      }
+
+      h1 {
+        font-size: 48px;
+        letter-spacing: -3px;
+      }
+
+      .hero {
+        margin-top: 25px;
+      }
+
+      .hero-description {
+        font-size: 17px;
+      }
+
+      .checks {
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .metrics {
+        flex-wrap: wrap;
+        gap: 18px;
+      }
+
+      .metric {
+        padding-right: 18px;
+      }
+
+      .hero-visual {
+        height: 390px;
+      }
+
+      .dashboard {
+        width: 600px;
+        transform: scale(.72) rotate(-2deg);
+      }
+
+      .annotation,
+      .hand-note {
+        display: none;
+      }
+
+      .features {
+        grid-template-columns: 1fr;
+      }
+
+      .tool-list {
+        flex-wrap: wrap;
+      }
+
+      .opensource {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- NAVIGATION -->
+  <nav>
+    <a href="#" class="logo">
+      <div class="logo-mark">✓</div>
+      TestMyVibe
+    </a>
+
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#how">How it works</a>
+      <a href="#usecases">Use cases</a>
+      <a href="#docs">Docs</a>
+      <a href="#pricing">Pricing</a>
+    </div>
+
+    <div class="nav-right">
+      <a href="#" class="github">◉ &nbsp; Star on GitHub</a>
+      <button class="open-app">Open App&nbsp; →</button>
+    </div>
+  </nav>
+
+
+  <!-- HERO -->
+  <main class="hero">
+
+    <section class="hero-copy">
+
+      <div class="eyebrow">
+        ✦ &nbsp; AI-Native QA for Modern Teams
+      </div>
+
+      <h1>
+        Ship with confidence,<br>
+        <span>not guesswork.</span>
+      </h1>
+
+      <p class="hero-description">
+        TestMyVibe uses AI to audit your product flows, catch issues,
+        and help you ship better software — faster.
+      </p>
+
+      <div class="hero-actions">
+        <button class="primary-btn">
+          Open Workspace&nbsp; →
+        </button>
+
+        <button class="secondary-btn">
+          ▶ &nbsp; Watch Demo
+        </button>
+      </div>
+
+      <div class="checks">
+        <span>AI-powered audits</span>
+        <span>Finds real user issues</span>
+        <span>Works with your stack</span>
+      </div>
+
+      <div class="metrics">
+        <div class="metric">
+          <strong>24</strong>
+          <span>Flows</span>
+        </div>
+
+        <div class="metric">
+          <strong>60</strong>
+          <span>Audit runs</span>
+        </div>
+
+        <div class="metric">
+          <strong>2</strong>
+          <span>Projects</span>
+        </div>
+
+        <div class="metric">
+          <strong>4</strong>
+          <span>Open issues</span>
+        </div>
+      </div>
+
+    </section>
+
+
+    <!-- DASHBOARD VISUAL -->
+    <section class="hero-visual">
+
+      <div class="orb"></div>
+
+      <div class="annotation note-one">
+        Audit your product flows<br>
+        with AI ↗
+      </div>
+
+      <div class="annotation note-two">
+        Catch issues<br>early
+      </div>
+
+      <div class="annotation note-three">
+        Ship better<br>experiences
+      </div>
+
+      <div class="hand-note">
+        Let AI<br>
+        find what<br>
+        you miss ↗
+      </div>
+
+      <div class="dashboard">
+
+        <div class="window-bar">
+          <div class="dot"></div>
+          <div class="dot"></div>
+          <div class="dot"></div>
+        </div>
+
+        <div class="window-content">
+
+          <aside class="dash-sidebar">
+
+            <div class="dash-logo">
+              ✓ &nbsp; TestMyVibe
+            </div>
+
+            <div class="workspace">
+              WORKSPACE
+            </div>
+
+            <div class="workspace-box">
+              AgencyLoop&nbsp;⌄
+            </div>
+
+            <div class="side-item active">
+              ▦ &nbsp; Overview
+            </div>
+
+            <div class="side-item">
+              ♧ &nbsp; Issue board
+            </div>
+
+            <div class="side-item">
+              ⌘ &nbsp; Feature graph
+            </div>
+
+            <div class="side-item">
+              ☷ &nbsp; User flows
+            </div>
+
+            <div class="side-item">
+              ⚙ &nbsp; Settings
+            </div>
+
+          </aside>
+
+
+          <div class="dash-main">
+
+            <div class="dash-title">
+              AgencyLoop
+            </div>
+
+            <div class="dash-sub">
+              Audit status, user flows, and approved fixes.
+            </div>
+
+            <div class="dash-stats">
+
+              <div class="stat">
+                <strong>20</strong>
+                <small>Flows</small>
+              </div>
+
+              <div class="stat">
+                <strong>22</strong>
+                <small>Audit runs</small>
+              </div>
+
+              <div class="stat yellow">
+                <strong>4</strong>
+                <small>Open issues</small>
+              </div>
+
+              <div class="stat green">
+                <strong>2</strong>
+                <small>Resolved</small>
+              </div>
+
+            </div>
+
+
+            <div class="status-grid">
+
+              <div class="status">
+                1
+                <label>pending</label>
+              </div>
+
+              <div class="status">
+                1
+                <label>approved</label>
+              </div>
+
+              <div class="status">
+                1
+                <label>in progress</label>
+              </div>
+
+              <div class="status">
+                1
+                <label>in review</label>
+              </div>
+
+              <div class="status">
+                2
+                <label>done</label>
+              </div>
+
+              <div class="status">
+                0
+                <label>rejected</label>
+              </div>
+
+            </div>
+
+
+            <div class="audit-title">
+              Recent audit runs
+            </div>
+
+            <div class="audit">
+              <span class="passed">passed</span>
+              Lead: WhatsApp draft → mark contacted
+            </div>
+
+            <div class="audit">
+              <span class="passed">passed</span>
+              Lead: call script → mark contacted
+            </div>
+
+            <div class="audit">
+              <span class="passed">blocked</span>
+              Lead: call script → mark contacted
+            </div>
+
+            <div class="audit">
+              <span class="passed">passed</span>
+              Lead: email outreach blocked by missing SMTP config
+            </div>
+
+            <div class="audit">
+              <span class="passed">passed</span>
+              Lead: upload mockup → build proposal → reach out
+            </div>
+
+          </div>
+
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+
+  <!-- FEATURES -->
+  <section class="features" id="features">
+
+    <div class="feature">
+      <div class="feature-icon">⌕</div>
+      <h3>AI-Powered Audits</h3>
+      <p>
+        Automatically test your user flows and find what's broken.
+      </p>
+    </div>
+
+    <div class="feature">
+      <div class="feature-icon">ϟ</div>
+      <h3>Visual Issue Board</h3>
+      <p>
+        Review, approve, or reject issues with clear context.
+      </p>
+    </div>
+
+    <div class="feature">
+      <div class="feature-icon">⌘</div>
+      <h3>Understand Flows</h3>
+      <p>
+        Visualize your product's feature graph and user journeys.
+      </p>
+    </div>
+
+    <div class="feature">
+      <div class="feature-icon">♧</div>
+      <h3>Built for Teams</h3>
+      <p>
+        Collaborate with your team, assign issues, and ship faster.
+      </p>
+    </div>
+
+  </section>
+
+
+  <!-- TOOLS -->
+  <section class="tools">
+
+    <div>
+      <div class="tool-label">
+        WORKS WITH YOUR FAVORITE TOOLS
+      </div>
+
+      <div class="tool-list">
+
+        <div class="tool">
+          <div class="tool-icon">▲</div>
+          Cursor
+        </div>
+
+        <div class="tool">
+          <div class="tool-icon">◆</div>
+          VS Code
+        </div>
+
+        <div class="tool">
+          <div class="tool-icon">✳</div>
+          Claude
+        </div>
+
+        <div class="tool">
+          <div class="tool-icon">◎</div>
+          Codex
+        </div>
+
+        <div class="tool">
+          <div class="tool-icon">+</div>
+          Any AI tool
+        </div>
+
+      </div>
+    </div>
+
+
+    <div class="opensource">
+
+      <div>
+        <strong>Open Source. Built for Builders.</strong>
+        <p>
+          TestMyVibe is independent and open source.
+          Use it, modify it, make it better.
+        </p>
+      </div>
+
+      <button class="star">
+        ◉ &nbsp; Star on GitHub
+      </button>
+
+    </div>
+
+  </section>
+
+</body>
+</html>

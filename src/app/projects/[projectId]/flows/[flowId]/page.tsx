@@ -1,4 +1,6 @@
 "use client";
+import { checkedFetch } from "@/lib/client-fetch";
+import LoadError from "@/components/LoadError";
 
 import { useEffect, useState, use as usePromise } from "react";
 import Link from "next/link";
@@ -34,37 +36,79 @@ const statusColor: Record<string, string> = {
   running: "bg-amber-500/10 text-amber-400",
 };
 
-export default function FlowPage({ params }: { params: Promise<{ projectId: string; flowId: string }> }) {
+type RunSummary = {
+  verifiedSteps?: number;
+  totalSteps?: number;
+  issueCount?: number;
+};
+
+function parseRunSummary(summary: string | null): RunSummary | null {
+  if (!summary) return null;
+  try {
+    const parsed: unknown = JSON.parse(summary);
+    return parsed && typeof parsed === "object" ? (parsed as RunSummary) : null;
+  } catch {
+    return null;
+  }
+}
+
+export default function FlowPage({
+  params,
+}: {
+  params: Promise<{ projectId: string; flowId: string }>;
+}) {
+  const [loadError, setLoadError] = useState("");
+
   const { projectId, flowId } = usePromise(params);
   const [flow, setFlow] = useState<FlowDetail | null>(null);
 
   async function load() {
-    const res = await fetch(`/api/projects/${projectId}/flows/${flowId}`);
-    if (res.ok) setFlow(await res.json());
+    try {
+      const res = await checkedFetch(
+        `/api/projects/${projectId}/flows/${flowId}`,
+      );
+      if (res.ok) setFlow(await res.json());
+
+      setLoadError("");
+    } catch (error) {
+      setLoadError(
+        error instanceof Error
+          ? error.message
+          : "Connection failed. Please retry.",
+      );
+    }
   }
 
   useEffect(() => {
-    load();
+    void Promise.resolve().then(load);
     const interval = setInterval(load, 4000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flowId]);
 
+  if (loadError) return <LoadError message={loadError} />;
   if (!flow) return <p className="text-neutral-500 text-sm">Loading…</p>;
 
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <Link href={`/projects/${projectId}/flows`} className="text-sm text-neutral-500 hover:text-neutral-300">
+        <Link
+          href={`/projects/${projectId}/flows`}
+          className="text-sm text-neutral-500 hover:text-neutral-300"
+        >
           ← {flow.project.name} flows
         </Link>
         <div className="flex items-center gap-2 mt-1">
           <h1 className="text-2xl font-semibold">{flow.name}</h1>
           {flow.source === "ai-discovered" && (
-            <span className="badge bg-indigo-500/10 text-indigo-300 text-[10px]">AI-discovered</span>
+            <span className="badge bg-indigo-500/10 text-indigo-300 text-[10px]">
+              AI-discovered
+            </span>
           )}
         </div>
-        {flow.description && <p className="text-neutral-500 text-sm">{flow.description}</p>}
+        {flow.description && (
+          <p className="text-neutral-500 text-sm">{flow.description}</p>
+        )}
       </div>
 
       <div className="card">
@@ -76,7 +120,11 @@ export default function FlowPage({ params }: { params: Promise<{ projectId: stri
                 <span className="text-neutral-600 w-5">{s.order + 1}.</span>
                 <span className="font-medium">{s.description}</span>
               </div>
-              {s.expectedOutcome && <p className="text-xs text-neutral-500 pl-7 mt-0.5">→ {s.expectedOutcome}</p>}
+              {s.expectedOutcome && (
+                <p className="text-xs text-neutral-500 pl-7 mt-0.5">
+                  → {s.expectedOutcome}
+                </p>
+              )}
             </li>
           ))}
         </ol>
@@ -86,13 +134,16 @@ export default function FlowPage({ params }: { params: Promise<{ projectId: stri
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-medium text-lg">Audit runs</h2>
           <p className="text-xs text-neutral-600">
-            Runs are created by your connected AI via MCP — ask it to audit this flow.
+            Runs are created by your connected AI via MCP — ask it to audit this
+            flow.
           </p>
         </div>
-        {flow.runs.length === 0 && <p className="text-neutral-500 text-sm">No audit runs yet.</p>}
+        {flow.runs.length === 0 && (
+          <p className="text-neutral-500 text-sm">No audit runs yet.</p>
+        )}
         <div className="flex flex-col gap-2">
           {flow.runs.map((r) => {
-            const summary = r.summary ? JSON.parse(r.summary) : null;
+            const summary = parseRunSummary(r.summary);
             return (
               <Link
                 key={r.id}
@@ -100,12 +151,22 @@ export default function FlowPage({ params }: { params: Promise<{ projectId: stri
                 className="card flex items-center justify-between hover:border-indigo-500/50"
               >
                 <div className="flex items-center gap-3">
-                  <span className={`badge ${statusColor[r.status] ?? ""}`}>{r.status}</span>
-                  <span className="text-sm text-neutral-400">{new Date(r.startedAt).toLocaleString()}</span>
+                  <span className={`badge ${statusColor[r.status] ?? ""}`}>
+                    {r.status}
+                  </span>
+                  <span className="text-sm text-neutral-400">
+                    {new Date(r.startedAt).toLocaleString()}
+                  </span>
                 </div>
                 {summary && (
                   <span className="text-xs text-neutral-500">
-                    {summary.verifiedSteps ?? 0}/{summary.totalSteps ?? "?"} steps verified · {summary.issueCount ?? 0} issue(s)
+                    {summary.verifiedSteps ?? 0}/{summary.totalSteps ?? "?"}{" "}
+                    steps verified · {summary.issueCount ?? 0} issue(s)
+                  </span>
+                )}
+                {r.summary && !summary && (
+                  <span className="max-w-sm truncate text-xs text-neutral-500">
+                    {r.summary}
                   </span>
                 )}
               </Link>

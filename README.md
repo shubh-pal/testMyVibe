@@ -1,41 +1,88 @@
 # TestMyVibe
 
-A test-case generator and audit tool for vibe-coded apps — but instead of running a browser,
-it hands your own AI (Claude Code / Claude Desktop / any MCP client) an **MCP server** so it can
-audit your codebase by actually reading it.
+A self-hosted quality dashboard for AI-assisted development. Discover user journeys, audit source code, approve findings, and review agent-generated fixes. Uses standard MCP Streamable HTTP, with setup tabs for Claude Code, Cursor, VS Code, Codex, and other compatible clients.
 
-## How it works
+## Local setup
 
-1. Create a **Project** here, pointing at a codebase (local path and/or GitHub URL — these are just
-   context shown to the connecting AI).
-2. Copy the project's MCP server URL + Bearer token from the Connect panel and add it to Claude Code:
-   ```bash
-   claude mcp add --transport http testmyvibe http://localhost:3000/api/mcp --header "Authorization: Bearer <token>"
-   ```
-3. Ask Claude to audit the codebase. It will:
-   - Discover user flows by reading routes/pages/components (e.g. "Home -> Login -> submit -> verified")
-   - Register each flow via `create_flow`
-   - Check every step against the real source (not by running anything) and call `report_step_result`
-   - File concrete findings via `report_issue`, each with a **ready-to-paste fix prompt**
-   - Wrap up with `finish_run`
-4. Watch the audit build live on the dashboard, then copy fix prompts straight back into your coding
-   session to actually fix the issues.
+Requires Node.js 20.19+ (Node 22 recommended) and npm.
 
-## Stack
-
-- Next.js (App Router) + TypeScript + Tailwind
-- Prisma + SQLite (swap `DATABASE_URL` for Postgres in production)
-- `@modelcontextprotocol/sdk` — Streamable HTTP MCP server at `/api/mcp`, stateless, one token per project
-
-## Data model
-
-`Project` → `Flow` → `Step` (plain-English description + expected outcome)
-`Run` → `StepResult` (verified/missing/partial) + `Issue` (severity, category, description, fixPrompt, file/line)
-
-## Local dev
-
-```bash
-npm install
-npx prisma migrate dev
+```sh
+npm ci
+cp .env.example .env
+touch prisma/dev.db
+npx prisma migrate deploy
+npx prisma generate
 npm run dev
 ```
+
+Open http://localhost:3000, create an account and workspace, then name a project. Open **AI connection** in that project for client setup and the MCP diagnostic. Your AI agent audits the repository already open in its workspace; TestMyVibe does not collect a local path or repository URL and cannot read your files itself.
+
+## Quality workflow
+
+1. Connect your coding agent and ask it to call `get_project`.
+2. Discover user flows; reuse existing flows on subsequent audits.
+3. Audit each step against source and report concrete evidence.
+4. Review findings on the issue board and approve or reject them.
+5. Ask your agent to claim approved issues, make fixes, and submit resolutions.
+6. Review the changes and mark them done, or send them back.
+
+Audits are source inspections, not browser execution. The external agent performs all code reading, edits, and tests. The dashboard stores evidence and decisions.
+
+## Scheduling
+
+The AI connection page includes a copyable, tool-neutral scheduling prompt:
+
+- Every hour: discover new user flows and audit existing journeys.
+- Every 30 minutes: claim and fix approved issues, then submit for human review.
+
+TestMyVibe does **not** run a scheduler or execute your agent. A scheduling-capable AI tool or an external scheduler must create and run these jobs. The prompt includes approval boundaries, no-overlap guidance, validation, and failure reporting. Confirm activation in the chosen scheduler.
+
+## Accounts and tenancy
+
+Each signup creates a separate private workspace. Sessions use random, hashed server-side tokens, HTTP-only SameSite cookies, and seven-day expiry. Passwords use salted scrypt. Every dashboard API checks the session and workspace ownership, including nested flow, run, issue, and aggregate queries. MCP bearer tokens are scoped to one project and can be rotated.
+
+This release provides one workspace per account, not team invitations or role management. Account recovery and email verification are not implemented.
+
+Existing projects are preserved during migration with no workspace assignment; they are never automatically given to the first signup. A trusted server administrator can assign a specific unowned project after the intended owner signs up:
+
+```sh
+node --env-file=.env scripts/assign-legacy-project.mjs PROJECT_ID EXISTING_USER_EMAIL
+```
+
+Existing MCP tokens continue to work until rotated. Back up the database before upgrading.
+
+## Self-hosting
+
+```sh
+npm ci
+npx prisma generate
+# Create the empty SQLite file at DATABASE_URL if it does not yet exist.
+touch prisma/dev.db
+npx prisma migrate deploy
+npm run build
+npm start
+```
+
+Set DATABASE_URL to a SQLite file on a persistent, writable volume. Create that file and its parent directory before the first migration; the touch command above assumes the default file location. Use one app instance with this SQLite configuration. Run behind HTTPS; production session cookies are Secure. Configure request size limits and authentication rate limiting at your reverse proxy before exposing signup to the public internet. Do not place the SQLite database on ephemeral/serverless storage. Back it up regularly.
+
+Remote AI clients need a reachable HTTPS endpoint. A localhost URL works only from the same machine. MCP credentials grant project read/write access; store them in secret environment/configuration, never in commits. Query-string tokens are supported for legacy clients but bearer headers are preferred because URLs can be logged.
+
+## Validation
+
+With the development server running:
+
+```sh
+npm run lint
+npm run build
+npm run test:integration
+```
+
+The integration suite creates temporary accounts and projects, tests tenant isolation, authentication, input validation, cross-origin rejection, MCP approval gates and token rotation, then removes its own fixtures. Use TEST_BASE_URL to target another local test server; do not run it against production.
+
+## Client references
+
+Configuration shapes are based on the official [Cursor MCP docs](https://cursor.com/docs/context/mcp), [VS Code MCP docs](https://code.visualstudio.com/docs/agent-customization/mcp-servers), [Claude Code MCP docs](https://code.claude.com/docs/en/mcp), and [Codex MCP docs](https://developers.openai.com/codex/mcp). Client capabilities and scheduling support vary.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Licensed under the MIT license.

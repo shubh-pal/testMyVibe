@@ -1,9 +1,23 @@
+import { z } from "zod";
+import { authorize } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-const VALID_STATUSES = ["pending", "approved", "rejected", "in_progress", "in_review", "done"];
+const VALID_STATUSES = [
+  "pending",
+  "approved",
+  "rejected",
+  "in_progress",
+  "in_review",
+  "done",
+];
 
-export async function GET(_req: Request, { params }: { params: Promise<{ issueId: string }> }) {
+export async function GET(
+  _req: Request,
+  { params }: { params: Promise<{ issueId: string }> },
+) {
+  const denied = await authorize(_req);
+  if (denied) return denied;
   const { issueId } = await params;
   const issue = await prisma.issue.findUnique({
     where: { id: issueId },
@@ -20,13 +34,35 @@ export async function GET(_req: Request, { params }: { params: Promise<{ issueId
   return NextResponse.json(issue);
 }
 
-export async function PATCH(req: Request, { params }: { params: Promise<{ issueId: string }> }) {
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ issueId: string }> },
+) {
+  const denied = await authorize(req);
+  if (denied) return denied;
   const { issueId } = await params;
-  const body = await req.json();
-  const { status, reviewNotes } = body as { status?: string; reviewNotes?: string };
+  const parsed = z
+    .object({
+      status: z.string().optional(),
+      reviewNotes: z.string().max(10000).optional(),
+    })
+    .safeParse(await req.json().catch(() => null));
+  if (!parsed.success)
+    return NextResponse.json(
+      { error: "Invalid issue update" },
+      { status: 400 },
+    );
+  const body = parsed.data;
+  const { status, reviewNotes } = body as {
+    status?: string;
+    reviewNotes?: string;
+  };
 
   if (status && !VALID_STATUSES.includes(status)) {
-    return NextResponse.json({ error: `status must be one of ${VALID_STATUSES.join(", ")}` }, { status: 400 });
+    return NextResponse.json(
+      { error: `status must be one of ${VALID_STATUSES.join(", ")}` },
+      { status: 400 },
+    );
   }
 
   const issue = await prisma.issue.update({

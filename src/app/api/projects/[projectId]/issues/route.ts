@@ -1,7 +1,13 @@
+import { authorize } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-export async function GET(_req: Request, { params }: { params: Promise<{ projectId: string }> }) {
+export async function GET(
+  _req: Request,
+  { params }: { params: Promise<{ projectId: string }> },
+) {
+  const denied = await authorize(_req);
+  if (denied) return denied;
   const { projectId } = await params;
   const issues = await prisma.issue.findMany({
     where: { projectId },
@@ -23,6 +29,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
       flowId: i.run.flow.id,
       flowName: i.run.flow.name,
       runId: i.runId,
-    }))
+    })),
   );
 }

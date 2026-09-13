@@ -1,4 +1,6 @@
 "use client";
+import { checkedFetch } from "@/lib/client-fetch";
+import LoadError from "@/components/LoadError";
 
 import { useEffect, useState, use as usePromise } from "react";
 import Link from "next/link";
@@ -13,21 +15,38 @@ interface FlowListItem {
   _count: { runs: number };
 }
 
-export default function FlowsPage({ params }: { params: Promise<{ projectId: string }> }) {
+export default function FlowsPage({
+  params,
+}: {
+  params: Promise<{ projectId: string }>;
+}) {
+  const [loadError, setLoadError] = useState("");
+
   const { projectId } = usePromise(params);
   const [flows, setFlows] = useState<FlowListItem[] | null>(null);
   const [showBuilder, setShowBuilder] = useState(false);
 
   async function load() {
-    const res = await fetch(`/api/projects/${projectId}`);
-    if (res.ok) setFlows((await res.json()).flows);
+    try {
+      const res = await checkedFetch(`/api/projects/${projectId}`);
+      if (res.ok) setFlows((await res.json()).flows);
+
+      setLoadError("");
+    } catch (error) {
+      setLoadError(
+        error instanceof Error
+          ? error.message
+          : "Connection failed. Please retry.",
+      );
+    }
   }
 
   useEffect(() => {
-    load();
+    void Promise.resolve().then(load);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
+  if (loadError) return <LoadError message={loadError} />;
   return (
     <div className="flex flex-col gap-8">
       <div className="flex items-center justify-between">
@@ -46,8 +65,9 @@ export default function FlowsPage({ params }: { params: Promise<{ projectId: str
         {flows === null && <p className="text-neutral-500 text-sm">Loading…</p>}
         {flows?.length === 0 && (
           <p className="text-neutral-500 text-sm">
-            No flows yet. Connect the MCP endpoint (Settings) and ask your AI to audit this codebase —
-            it will discover flows automatically. Or add one manually.
+            No flows yet. Connect the MCP endpoint (Settings) and ask your AI to
+            audit this codebase — it will discover flows automatically. Or add
+            one manually.
           </p>
         )}
         {flows?.map((f) => (
@@ -59,11 +79,17 @@ export default function FlowsPage({ params }: { params: Promise<{ projectId: str
             <div className="flex items-start justify-between">
               <h3 className="font-medium">{f.name}</h3>
               {f.source === "ai-discovered" && (
-                <span className="badge bg-indigo-500/10 text-indigo-300 text-[10px]">AI-discovered</span>
+                <span className="badge bg-indigo-500/10 text-indigo-300 text-[10px]">
+                  AI-discovered
+                </span>
               )}
             </div>
-            {f.description && <p className="text-sm text-neutral-500 mt-0.5">{f.description}</p>}
-            <p className="text-xs text-neutral-600 mt-2">{f._count.runs} audit run(s)</p>
+            {f.description && (
+              <p className="text-sm text-neutral-500 mt-0.5">{f.description}</p>
+            )}
+            <p className="text-xs text-neutral-600 mt-2">
+              {f._count.runs} audit run(s)
+            </p>
           </Link>
         ))}
       </div>
@@ -74,7 +100,7 @@ export default function FlowsPage({ params }: { params: Promise<{ projectId: str
           onClose={() => setShowBuilder(false)}
           onCreated={() => {
             setShowBuilder(false);
-            load();
+            void Promise.resolve().then(load);
           }}
         />
       )}
@@ -94,28 +120,32 @@ function FlowBuilderModal({
   const templates = otherTemplates();
   const [mode, setMode] = useState<"template" | "custom">("template");
   const [selectedTemplate, setSelectedTemplate] = useState(0);
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [steps, setSteps] = useState<StepDef[]>([]);
+  const [name, setName] = useState(templates[0].name);
+  const [description, setDescription] = useState(templates[0].description);
+  const [steps, setSteps] = useState<StepDef[]>(templates[0].steps);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (mode === "template") {
-      const t = templates[selectedTemplate];
-      setName(t.name);
-      setDescription(t.description);
-      setSteps(t.steps);
-    } else {
-      setName("");
-      setDescription("");
-      setSteps([{ order: 0, description: "User visits the home page" }]);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, selectedTemplate]);
+  function selectTemplate(
+    nextMode: "template" | "custom",
+    index = selectedTemplate,
+  ) {
+    setMode(nextMode);
+    setSelectedTemplate(index);
+    const t = templates[index];
+    setName(nextMode === "template" ? t.name : "");
+    setDescription(nextMode === "template" ? t.description : "");
+    setSteps(
+      nextMode === "template"
+        ? t.steps
+        : [{ order: 0, description: "User visits the home page" }],
+    );
+  }
 
   function updateStep(i: number, patch: Partial<StepDef>) {
-    setSteps((s) => s.map((step, idx) => (idx === i ? { ...step, ...patch } : step)));
+    setSteps((s) =>
+      s.map((step, idx) => (idx === i ? { ...step, ...patch } : step)),
+    );
   }
 
   function addStep() {
@@ -123,12 +153,20 @@ function FlowBuilderModal({
   }
 
   function removeStep(i: number) {
-    setSteps((s) => s.filter((_, idx) => idx !== i).map((step, idx) => ({ ...step, order: idx })));
+    setSteps((s) =>
+      s
+        .filter((_, idx) => idx !== i)
+        .map((step, idx) => ({ ...step, order: idx })),
+    );
   }
 
   async function save() {
     setError(null);
-    if (!name.trim() || steps.length === 0 || steps.some((s) => !s.description.trim())) {
+    if (
+      !name.trim() ||
+      steps.length === 0 ||
+      steps.some((s) => !s.description.trim())
+    ) {
       setError("Give the flow a name and fill in every step's description");
       return;
     }
@@ -154,11 +192,14 @@ function FlowBuilderModal({
         <div className="flex gap-2">
           <button
             className={mode === "template" ? "btn-primary" : "btn-secondary"}
-            onClick={() => setMode("template")}
+            onClick={() => selectTemplate("template")}
           >
             From template
           </button>
-          <button className={mode === "custom" ? "btn-primary" : "btn-secondary"} onClick={() => setMode("custom")}>
+          <button
+            className={mode === "custom" ? "btn-primary" : "btn-secondary"}
+            onClick={() => selectTemplate("custom")}
+          >
             Custom
           </button>
         </div>
@@ -168,7 +209,7 @@ function FlowBuilderModal({
             {templates.map((t, i) => (
               <button
                 key={t.name}
-                onClick={() => setSelectedTemplate(i)}
+                onClick={() => selectTemplate("template", i)}
                 className={`badge border ${
                   i === selectedTemplate
                     ? "border-indigo-400 bg-indigo-500/10 text-indigo-300"
@@ -183,12 +224,32 @@ function FlowBuilderModal({
 
         <div className="grid sm:grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs text-neutral-400 mb-1">Flow name</label>
-            <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+            <label
+              htmlFor="flow-name"
+              className="block text-xs text-neutral-400 mb-1"
+            >
+              Flow name
+            </label>
+            <input
+              id="flow-name"
+              className="input"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
           </div>
           <div>
-            <label className="block text-xs text-neutral-400 mb-1">Description</label>
-            <input className="input" value={description} onChange={(e) => setDescription(e.target.value)} />
+            <label
+              htmlFor="description"
+              className="block text-xs text-neutral-400 mb-1"
+            >
+              Description
+            </label>
+            <input
+              id="description"
+              className="input"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
           </div>
         </div>
 
@@ -202,16 +263,24 @@ function FlowBuilderModal({
             </button>
           </div>
           {steps.map((step, i) => (
-            <div key={i} className="rounded-lg border border-neutral-800 p-3 flex flex-col gap-2">
+            <div
+              key={i}
+              className="rounded-lg border border-neutral-800 p-3 flex flex-col gap-2"
+            >
               <div className="flex items-center gap-2">
                 <span className="text-xs text-neutral-500 w-5">{i + 1}.</span>
                 <input
                   className="input flex-1"
                   placeholder="What the user does, e.g. 'User clicks Login'"
                   value={step.description}
-                  onChange={(e) => updateStep(i, { description: e.target.value })}
+                  onChange={(e) =>
+                    updateStep(i, { description: e.target.value })
+                  }
                 />
-                <button className="btn-danger text-xs" onClick={() => removeStep(i)}>
+                <button
+                  className="btn-danger text-xs"
+                  onClick={() => removeStep(i)}
+                >
                   Remove
                 </button>
               </div>
@@ -219,7 +288,9 @@ function FlowBuilderModal({
                 className="input ml-7"
                 placeholder="Expected outcome (optional), e.g. 'Redirected to /login'"
                 value={step.expectedOutcome ?? ""}
-                onChange={(e) => updateStep(i, { expectedOutcome: e.target.value })}
+                onChange={(e) =>
+                  updateStep(i, { expectedOutcome: e.target.value })
+                }
               />
             </div>
           ))}

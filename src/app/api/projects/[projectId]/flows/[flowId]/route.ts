@@ -1,7 +1,13 @@
+import { authorize } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-export async function GET(_req: Request, { params }: { params: Promise<{ projectId: string; flowId: string }> }) {
+export async function GET(
+  _req: Request,
+  { params }: { params: Promise<{ projectId: string; flowId: string }> },
+) {
+  const denied = await authorize(_req);
+  if (denied) return denied;
   const { flowId } = await params;
   const flow = await prisma.flow.findUnique({
     where: { id: flowId },
@@ -15,7 +21,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
   return NextResponse.json(flow);
 }
 
-export async function DELETE(_req: Request, { params }: { params: Promise<{ projectId: string; flowId: string }> }) {
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ projectId: string; flowId: string }> },
+) {
+  const denied = await authorize(_req);
+  if (denied) return denied;
   const { flowId } = await params;
   await prisma.flow.delete({ where: { id: flowId } });
   return NextResponse.json({ ok: true });

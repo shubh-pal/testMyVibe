@@ -1,0 +1,23 @@
+name: Checks
+on: [push, pull_request]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: file:./ci.db
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: touch prisma/ci.db
+      - run: npx prisma migrate deploy
+      - run: npx prisma generate
+      - run: npm run lint
+      - run: npm run build
+      - run: |
+          npm start > /tmp/testmyvibe.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://localhost:3000/ > /dev/null && break; sleep 1; done
+          node tests/integration.mjs

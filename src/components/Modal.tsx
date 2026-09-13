@@ -1,7 +1,5 @@
 "use client";
-
-import { useEffect } from "react";
-
+import { useEffect, useRef, useId } from "react";
 export default function Modal({
   title,
   onClose,
@@ -13,31 +11,48 @@ export default function Modal({
   children: React.ReactNode;
   wide?: boolean;
 }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
   useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
+    const dialog = ref.current;
+    dialog?.showModal();
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      dialog?.close();
+      document.body.style.overflow = previous;
+    };
+  }, []);
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-4 sm:p-8"
-      onClick={onClose}
+    <dialog
+      ref={ref}
+      aria-labelledby={titleId}
+      onCancel={(e) => {
+        e.preventDefault();
+        onClose();
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      className={
+        "app-dialog card text-neutral-100 " + (wide ? "max-w-3xl" : "max-w-lg")
+      }
     >
-      <div
-        className={`card w-full ${wide ? "max-w-3xl" : "max-w-lg"} mt-8 mb-8 bg-neutral-900 border-neutral-700`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-medium text-lg">{title}</h2>
-          <button className="text-neutral-500 hover:text-neutral-200 text-xl leading-none" onClick={onClose}>
+      <div>
+        <div className="flex items-center justify-between mb-5">
+          <h2 id={titleId} className="font-medium text-lg">
+            {title}
+          </h2>
+          <button
+            aria-label="Close dialog"
+            className="text-neutral-400 text-xl p-1"
+            onClick={onClose}
+          >
             ×
           </button>
         </div>
         {children}
       </div>
-    </div>
+    </dialog>
   );
 }
