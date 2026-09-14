@@ -208,6 +208,61 @@ export default function LandingV2() {
         </Link>
       </section>
 
+      {/* CREATOR */}
+      <section className={styles.creator}>
+        <div>
+          <div className={styles.creatorEyebrow}>
+            <span className={styles.creatorDot} /> WHO&apos;S BEHIND THIS
+          </div>
+          <h2 className={styles.creatorHeading}>Made by Shubh Palan.</h2>
+          <p className={styles.creatorCopy}>
+            TestMyVibe is an independent project I designed and built end to
+            end — from the first idea and product strategy to the AI
+            workflows and the dashboard you&apos;re using right now. I enjoy
+            turning tedious engineering busywork into tools that just work.
+          </p>
+          <div className={styles.creatorChips}>
+            <div className={styles.creatorChip}>
+              <span className={styles.creatorChipIcon}>{"</>"}</span>
+              <div>
+                <strong>Engineer</strong>
+                <span>by craft</span>
+              </div>
+            </div>
+            <div className={styles.creatorChip}>
+              <span className={styles.creatorChipIcon}>⚙</span>
+              <div>
+                <strong>Builder</strong>
+                <span>by choice</span>
+              </div>
+            </div>
+            <div className={styles.creatorChip}>
+              <span className={styles.creatorChipIcon}>♥</span>
+              <div>
+                <strong>Product-minded</strong>
+                <span>by nature</span>
+              </div>
+            </div>
+          </div>
+          <a
+            className={styles.star}
+            href="https://shubh.websight.pro"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Let&apos;s talk&nbsp;→
+          </a>
+        </div>
+        <div className={styles.creatorPortraitWrap}>
+          <div className={styles.creatorGlow} />
+          <img
+            src="/assets/me/shubh-portrait-clean.png"
+            alt="Illustrated portrait of Shubh Palan"
+            className={styles.creatorPortrait}
+          />
+        </div>
+      </section>
+
       <footer className={styles.footer}>
         <span>TestMyVibe</span>
         <span>Source-based audits. Human-led decisions.</span>

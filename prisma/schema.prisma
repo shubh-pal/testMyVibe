@@ -16,8 +16,14 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  // Pooled (Supavisor transaction mode, port 6543) — used by the running app.
+  // Its direct-connection host is IPv6-only and unreachable from here/Cloud
+  // Run, and transaction-mode pooling doesn't support the prepared
+  // statements `prisma migrate` needs, hence the separate directUrl below
+  // (Supavisor session mode, port 5432 — same pooler host, different port).
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model Project {

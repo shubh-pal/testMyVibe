@@ -1,2 +1,0 @@
-ALTER TABLE "Project" ADD COLUMN "autoApproveIssues" BOOLEAN NOT NULL DEFAULT false;
-ALTER TABLE "Project" ADD COLUMN "autoCloseIssues" BOOLEAN NOT NULL DEFAULT false;

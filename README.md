@@ -9,7 +9,8 @@ Requires Node.js 20.19+ (Node 22 recommended) and npm.
 ```sh
 npm ci
 cp .env.example .env
-touch prisma/dev.db
+# Edit .env: point DATABASE_URL (and DIRECT_URL, if pooled) at a Postgres
+# database — e.g. a free Supabase project.
 npx prisma migrate deploy
 npx prisma generate
 npm run dev
@@ -56,14 +57,12 @@ Existing MCP tokens continue to work until rotated. Back up the database before 
 ```sh
 npm ci
 npx prisma generate
-# Create the empty SQLite file at DATABASE_URL if it does not yet exist.
-touch prisma/dev.db
 npx prisma migrate deploy
 npm run build
 npm start
 ```
 
-Set DATABASE_URL to a SQLite file on a persistent, writable volume. Create that file and its parent directory before the first migration; the touch command above assumes the default file location. Use one app instance with this SQLite configuration. Run behind HTTPS; production session cookies are Secure. Configure request size limits and authentication rate limiting at your reverse proxy before exposing signup to the public internet. Do not place the SQLite database on ephemeral/serverless storage. Back it up regularly.
+Set DATABASE_URL to a Postgres connection string (Supabase, Neon, RDS, self-hosted — anything Prisma's `postgresql` provider supports). `npm start` already runs `prisma migrate deploy` before `next start` (see `scripts/start.mjs`), so a fresh instance with an empty database migrates itself on boot. If your provider puts a transaction-mode pooler in front of Postgres (e.g. Supabase's Supavisor on port 6543), also set DIRECT_URL to a session-mode or direct connection (port 5432) — migrations need prepared-statement support the transaction pooler doesn't provide. Run behind HTTPS; production session cookies are Secure. Configure request size limits and authentication rate limiting at your reverse proxy before exposing signup to the public internet. Back up the database regularly.
 
 Remote AI clients need a reachable HTTPS endpoint. A localhost URL works only from the same machine. MCP credentials grant project read/write access; store them in secret environment/configuration, never in commits. Query-string tokens are supported for legacy clients but bearer headers are preferred because URLs can be logged.
 
