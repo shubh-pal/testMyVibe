@@ -51,7 +51,15 @@ export async function logout() {
 }
 export function sameOrigin(req: Request) {
   const origin = req.headers.get("origin");
-  return !origin || origin === new URL(req.url).origin;
+  if (!origin) return true;
+  // Behind a reverse proxy (e.g. Cloud Run), the connection Next.js sees is
+  // plain HTTP even though the browser talked to the service over HTTPS, so
+  // req.url's scheme/host can't be trusted directly — prefer the
+  // X-Forwarded-* headers the proxy sets when present.
+  const url = new URL(req.url);
+  const proto = req.headers.get("x-forwarded-proto") ?? url.protocol.replace(":", "");
+  const host = req.headers.get("x-forwarded-host") ?? url.host;
+  return origin === `${proto}://${host}`;
 }
 export async function authorize(req: Request) {
   if (!["GET", "HEAD"].includes(req.method) && !sameOrigin(req))
