@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useParams, useRouter } from "next/navigation";
 import type { IconType } from "react-icons";
 import {
+  FiActivity,
   FiChevronsLeft,
   FiChevronsRight,
   FiClipboard,
@@ -23,6 +24,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<{
     name: string;
     workspace: { name: string };
+    isSuperAdmin?: boolean;
   } | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [error, setError] = useState("");
@@ -124,6 +126,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </Link>
         <span className="top-divider" />
         <Link href="/projects">Projects</Link>
+        {user.isSuperAdmin && (
+          <Link href="/admin" className="flex items-center gap-1.5">
+            <FiActivity aria-hidden="true" /> Admin
+          </Link>
+        )}
         <span className="top-context">Developer quality workspace</span>
         <Link href="/projects" className="btn-primary">
           + Create project

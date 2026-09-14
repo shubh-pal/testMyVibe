@@ -4,7 +4,7 @@ import LoadError from "@/components/LoadError";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Modal from "@/components/Modal";
 
 interface ProjectListItem {
@@ -18,8 +18,10 @@ export default function ProjectsPage() {
   const [loadError, setLoadError] = useState("");
 
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isOnboarding = searchParams.get("new") === "1";
   const [projects, setProjects] = useState<ProjectListItem[] | null>(null);
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState(isOnboarding);
   const [editing, setEditing] = useState<ProjectListItem | null>(null);
 
   async function load() {
@@ -107,10 +109,14 @@ export default function ProjectsPage() {
 
       {creating && (
         <ProjectFormModal
+          onboarding={isOnboarding}
           onClose={() => setCreating(false)}
           onSaved={(id) => {
             setCreating(false);
-            router.push(`/projects/${id}`);
+            // Land on Settings, not the overview — that's where the MCP
+            // connection details live, and connecting one is the very next
+            // thing anyone needs to do with a brand-new project.
+            router.push(`/projects/${id}/settings`);
           }}
         />
       )}
@@ -131,10 +137,12 @@ export default function ProjectsPage() {
 
 function ProjectFormModal({
   project,
+  onboarding,
   onClose,
   onSaved,
 }: {
   project?: ProjectListItem;
+  onboarding?: boolean;
   onClose: () => void;
   onSaved: (id: string) => void;
 }) {
@@ -171,8 +179,24 @@ function ProjectFormModal({
   }
 
   return (
-    <Modal title={project ? "Edit project" : "New project"} onClose={onClose}>
+    <Modal
+      title={
+        project
+          ? "Edit project"
+          : onboarding
+            ? "Name your first project"
+            : "New project"
+      }
+      onClose={onClose}
+    >
       <div className="flex flex-col gap-3">
+        {onboarding && (
+          <p className="text-sm text-neutral-400 leading-6">
+            One project per codebase you want audited. After you save,
+            we&apos;ll take you straight to its Settings page to connect an
+            MCP client.
+          </p>
+        )}
         <div>
           <label
             htmlFor="project-name"

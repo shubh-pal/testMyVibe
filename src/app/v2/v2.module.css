@@ -81,7 +81,7 @@
   color: var(--ink);
 }
 
-.openApp {
+a.openApp {
   color: white;
   background: var(--accent);
   padding: 13px 21px;
@@ -173,7 +173,7 @@
   transition: background-color 0.15s ease;
 }
 
-.primaryBtn {
+a.primaryBtn {
   color: white;
   background: var(--accent);
 }
@@ -182,7 +182,7 @@
   background: var(--accent-hover);
 }
 
-.secondaryBtn {
+a.secondaryBtn {
   background: var(--panel);
   color: var(--ink);
   border: 1px solid var(--border);
@@ -368,38 +368,81 @@
   color: var(--ink);
 }
 
-/* ---------------- FEATURES ---------------- */
+/* ---------------- HOW IT WORKS ---------------- */
 
-.features {
+.workflow {
   width: min(1380px, calc(100% - 80px));
-  margin: 60px auto 0;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 40px;
+  margin: 80px auto 0;
 }
 
-.feature {
-  padding: 0;
+.sectionHeading {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 10px 0 16px;
+  color: var(--ink-strong);
+  max-width: 720px;
+}
+
+.workflowIntro {
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.8;
+  max-width: 720px;
+  margin-bottom: 40px;
+}
+
+.workflowIntro strong {
+  color: var(--ink);
+}
+
+.stepList {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 32px 28px;
+}
+
+.step {
+  border-top: 2px solid var(--border);
+  padding-top: 16px;
 }
 
 .featureIcon {
   color: var(--accent);
   font-size: 12px;
   font-weight: 700;
-  margin-bottom: 18px;
+  margin-bottom: 14px;
   display: block;
 }
 
-.feature h3 {
-  font-size: 18px;
-  margin-bottom: 12px;
+.step h3 {
+  font-size: 16px;
+  margin-bottom: 8px;
   color: var(--ink);
 }
 
-.feature p {
+.step p {
   color: var(--muted);
-  line-height: 1.8;
-  font-size: 14px;
+  line-height: 1.7;
+  font-size: 13.5px;
+}
+
+.ctaRow {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-top: 44px;
+}
+
+.ctaHint {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.ctaHint a {
+  color: var(--accent-dim);
+  text-decoration: underline;
 }
 
 /* ---------------- TOOLS ---------------- */
@@ -479,7 +522,7 @@
   max-width: 560px;
 }
 
-.star {
+a.star {
   background: var(--accent);
   color: white;
   padding: 12px 20px;
@@ -548,10 +591,6 @@
     margin-top: 30px;
   }
 
-  .features {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
   .tools {
     flex-direction: column;
     align-items: stretch;
@@ -565,7 +604,7 @@
 @media (max-width: 700px) {
   .nav,
   .hero,
-  .features,
+  .workflow,
   .tools,
   .footer {
     width: min(100% - 30px, 1380px);
@@ -608,10 +647,6 @@
   .annotation,
   .handNote {
     display: none;
-  }
-
-  .features {
-    grid-template-columns: 1fr;
   }
 
   .opensource {

@@ -5,6 +5,7 @@ import {
   verifyPassword,
   logout,
   sameOrigin,
+  isSuperAdmin,
 } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
@@ -16,6 +17,7 @@ export async function GET() {
         name: user.name,
         email: user.email,
         workspace: user.workspace,
+        isSuperAdmin: isSuperAdmin(user),
       })
     : Response.json({ error: "Please sign in" }, { status: 401 });
 }

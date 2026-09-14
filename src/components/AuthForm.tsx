@@ -36,7 +36,11 @@ export default function AuthForm({ signup = false }: { signup?: boolean }) {
               });
               const result = await res.json();
               if (!res.ok) throw new Error(result.error);
-              router.push("/dashboard");
+              // First-time signups don't have a project yet, so send them
+              // straight into creating one instead of an empty dashboard —
+              // that flow lands them on the project's Settings page, where
+              // they connect an MCP client.
+              router.push(signup ? "/projects?new=1" : "/dashboard");
               router.refresh();
             } catch (e) {
               setError(

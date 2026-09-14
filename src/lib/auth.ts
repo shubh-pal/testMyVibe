@@ -43,6 +43,23 @@ export async function createSession(userId: string) {
     expires: expiresAt,
   });
 }
+// Super-admin access is configured via env, not a DB flag, so it can be set
+// per-deployment (a local .env, a Cloud Run env var) without a data migration
+// or an account field visible to normal users.
+function superAdminEmails() {
+  return (process.env.SUPER_ADMIN_EMAILS ?? "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+}
+export function isSuperAdmin(user: { email: string } | null) {
+  return !!user && superAdminEmails().includes(user.email.toLowerCase());
+}
+export async function requireSuperAdmin() {
+  const user = await currentUser();
+  if (!isSuperAdmin(user)) return null;
+  return user;
+}
 export async function logout() {
   const jar = await cookies();
   const token = jar.get("tmv_session")?.value;

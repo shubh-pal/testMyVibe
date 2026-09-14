@@ -95,9 +95,10 @@ export default function OrgDashboard() {
           <div className="eyebrow">GET STARTED</div>
           <h2 className="text-xl font-semibold">Connect your first codebase</h2>
           <p className="text-neutral-400 max-w-2xl">
-            Create a project, connect your AI tool, and ask it to discover and
-            audit your user flows. Findings arrive in your issue board for
-            approval.
+            Create a project, then connect an MCP-compatible AI tool (Claude
+            Code, Cursor, VS Code, Codex, or any MCP client) to it from
+            Settings. Ask that tool to get started — findings arrive in your
+            issue board for approval.
           </p>
           <Link href="/projects" className="btn-primary self-start">
             Create your first project →
