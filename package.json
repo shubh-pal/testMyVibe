@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "node --env-file-if-exists=.env scripts/start.mjs",
+    "postinstall": "prisma generate",
     "lint": "eslint",
     "test:integration": "node --env-file=.env tests/integration.mjs",
     "format": "prettier --write src tests scripts *.md"
