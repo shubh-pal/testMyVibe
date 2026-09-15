@@ -95,6 +95,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         {error || "Loading your workspace…"}
       </div>
     );
+  // /admin has its own shell (AdminShell, via src/app/admin/layout.tsx) with
+  // a separate sidebar — the auth check above still applies, but skip the
+  // regular workspace chrome so the two shells don't nest.
+  if (pathname === "/admin" || pathname.startsWith("/admin/"))
+    return <>{children}</>;
   if (runId && !runProjectId)
     return (
       <div className="p-10" role="status">

@@ -73,10 +73,10 @@ export default function AdminDashboard() {
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <h1 className="text-2xl font-semibold">Super admin</h1>
+        <h1 className="text-2xl font-semibold">Overview</h1>
         <p className="text-neutral-500 text-sm mt-1">
-          Usage across every workspace — how people are onboarding and what
-          they're actually doing with a connected AI tool.
+          How people are onboarding and what they're actually doing with a
+          connected AI tool.
         </p>
       </div>
 
