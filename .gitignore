@@ -45,3 +45,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 !.env.example
+
+# deployment (has real DB credentials — see deploy/README.md)
+/deploy
+
+# design working files (large embedded base64 assets, not app code)
+/.design
