@@ -416,8 +416,12 @@ export function createMcpServer(token: string) {
     },
     async () => {
       const project = await getProjectForToken(token);
-      // Best-effort atomic claim: SQLite serializes writes, so a findFirst + update
-      // pair here is safe enough for a single-writer dev setup.
+      // Atomic claim: the findFirst just picks a candidate, but the actual
+      // claim is the updateMany below with status: "approved" in its WHERE
+      // clause — if two callers race for the same issue, only one UPDATE
+      // matches (count: 1) and the other gets count: 0 and is told to
+      // retry. That compare-and-swap is what makes this safe under
+      // concurrent callers, not any assumption about the database engine.
       const next = await prisma.issue.findFirst({
         where: { projectId: project.id, status: "approved" },
         orderBy: { createdAt: "asc" },

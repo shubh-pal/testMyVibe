@@ -10,6 +10,15 @@ import {
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 
+// A valid-format hash that never matches any real password. Used to run
+// verifyPassword's scrypt work even when no account exists for the given
+// email, so a login attempt takes the same time either way — without this,
+// an unknown email returns near-instantly while a known one pays the scrypt
+// cost, letting an attacker enumerate registered emails by timing alone.
+const DUMMY_HASH = hashPassword(
+  "not-a-real-password-only-used-to-equalize-login-timing",
+);
+
 export async function GET() {
   const user = await currentUser();
   return user
@@ -68,7 +77,11 @@ export async function POST(req: Request) {
     }
   }
   const user = await prisma.user.findUnique({ where: { email } });
-  if (!user || !verifyPassword(body.password, user.passwordHash))
+  const validPassword = verifyPassword(
+    body.password,
+    user?.passwordHash ?? DUMMY_HASH,
+  );
+  if (!user || !validPassword)
     return Response.json(
       { error: "Invalid email or password" },
       { status: 401 },

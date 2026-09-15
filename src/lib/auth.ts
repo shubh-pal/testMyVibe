@@ -69,13 +69,21 @@ export async function logout() {
 export function sameOrigin(req: Request) {
   const origin = req.headers.get("origin");
   if (!origin) return true;
-  // Behind a reverse proxy (e.g. Cloud Run), the connection Next.js sees is
-  // plain HTTP even though the browser talked to the service over HTTPS, so
-  // req.url's scheme/host can't be trusted directly — prefer the
-  // X-Forwarded-* headers the proxy sets when present.
+  // Behind Cloud Run's front end, the connection Next.js sees is plain HTTP
+  // even though the browser talked to the service over HTTPS, so req.url's
+  // *scheme* can't be trusted directly — X-Forwarded-Proto fixes that, and
+  // Cloud Run's front end sets it based on the real client connection.
+  //
+  // The *host* must NOT come from X-Forwarded-Host: that header is passed
+  // through from the client completely unverified (confirmed against the
+  // live deployment — a request can set X-Forwarded-Host to anything), so
+  // trusting it lets a spoofed Origin sail through this check. The native
+  // Host header is safe to use instead — browsers refuse to let JavaScript
+  // override it on a request, so a cross-site fetch() can never carry a
+  // forged one.
   const url = new URL(req.url);
   const proto = req.headers.get("x-forwarded-proto") ?? url.protocol.replace(":", "");
-  const host = req.headers.get("x-forwarded-host") ?? url.host;
+  const host = req.headers.get("host") ?? url.host;
   return origin === `${proto}://${host}`;
 }
 export async function authorize(req: Request) {
