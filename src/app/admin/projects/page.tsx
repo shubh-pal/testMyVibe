@@ -31,7 +31,7 @@ export default function AdminProjectsPage() {
   }, []);
 
   if (loadError) return <LoadError message={loadError} />;
-  if (!projects) return <p className="text-neutral-500 text-sm">Loading…</p>;
+  if (!projects) return <p className="text-neutral-500 text-sm">Loading… (querying every workspace — can take a few seconds)</p>;
 
   return (
     <div className="flex flex-col gap-6">

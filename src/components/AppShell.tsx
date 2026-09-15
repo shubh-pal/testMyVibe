@@ -34,9 +34,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     pathname === "/v2" ||
     pathname === "/login" ||
     pathname === "/signup";
+  // admin/layout.tsx already does its own server-side auth+admin check
+  // before rendering anything under /admin, and AdminShell gets what it
+  // needs as a prop — so this shell's own auth+projects fetch here would
+  // just be a second, fully redundant round trip stacked in front of
+  // AdminDashboard's own fetch. Skip it like a public page.
+  const isAdminPage = pathname === "/admin" || pathname.startsWith("/admin/");
   const runId = pathname.match(/^\/runs\/([^/]+)$/)?.[1];
   useEffect(() => {
-    if (publicPage) return;
+    if (publicPage || isAdminPage) return;
     let active = true;
     Promise.all([fetch("/api/auth"), fetch("/api/projects")])
       .then(async ([a, p]) => {
@@ -58,7 +64,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return () => {
       active = false;
     };
-  }, [pathname, publicPage, router]);
+  }, [pathname, publicPage, isAdminPage, router]);
 
   useEffect(() => {
     let active = true;
@@ -88,18 +94,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       active = false;
     };
   }, [runId]);
-  if (publicPage) return children;
+  // /admin has its own shell (AdminShell, via src/app/admin/layout.tsx),
+  // its own auth+admin gate (server-side, before children render at all),
+  // and its own sidebar — nothing left for this shell to check or render.
+  if (publicPage || isAdminPage) return children;
   if (!user)
     return (
       <div className="p-10" role="status">
         {error || "Loading your workspace…"}
       </div>
     );
-  // /admin has its own shell (AdminShell, via src/app/admin/layout.tsx) with
-  // a separate sidebar — the auth check above still applies, but skip the
-  // regular workspace chrome so the two shells don't nest.
-  if (pathname === "/admin" || pathname.startsWith("/admin/"))
-    return <>{children}</>;
   if (runId && !runProjectId)
     return (
       <div className="p-10" role="status">

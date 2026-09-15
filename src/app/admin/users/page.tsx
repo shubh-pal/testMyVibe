@@ -31,7 +31,7 @@ export default function AdminUsersPage() {
   }, []);
 
   if (loadError) return <LoadError message={loadError} />;
-  if (!users) return <p className="text-neutral-500 text-sm">Loading…</p>;
+  if (!users) return <p className="text-neutral-500 text-sm">Loading… (querying every workspace — can take a few seconds)</p>;
 
   return (
     <div className="flex flex-col gap-6">

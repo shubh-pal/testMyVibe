@@ -55,7 +55,7 @@ export default function AdminDashboard() {
   }, []);
 
   if (loadError) return <LoadError message={loadError} />;
-  if (!stats) return <p className="text-neutral-500 text-sm">Loading…</p>;
+  if (!stats) return <p className="text-neutral-500 text-sm">Loading… (querying every workspace — can take a few seconds)</p>;
 
   const totalRuns = Object.values(stats.runs.byStatus).reduce(
     (a, b) => a + b,
