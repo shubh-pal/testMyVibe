@@ -83,186 +83,196 @@ export async function saveGraphBatch(
     if (new Set(collection.map((x) => x.key)).size !== collection.length)
       throw new Error("Duplicate keys in batch");
   }
-  return prisma.$transaction(async (tx) => {
-    const state = await tx.graphState.findUnique({ where: { projectId } });
-    if (!state) throw new Error("Call setup_project first");
-    if (state.leaseUntil && state.leaseUntil > new Date())
-      throw new Error(
-        "Audit in progress; retry discovery after its lease ends",
-      );
-    const changed = await tx.graphState.updateMany({
-      where: { projectId, version: input.expectedVersion },
-      data: {
-        version: { increment: 1 },
-        revision: input.revision,
-        revisionCommittedAt,
-        frontier: JSON.stringify(input.frontier),
-        discoveryStatus: input.discoveryStatus,
-      },
-    });
-    if (!changed.count)
-      throw new Error(
-        "Discovery version conflict; call setup_project and retry with the latest checkpoint",
-      );
-    const oldNodes = await tx.graphNode.findMany({ where: { projectId } });
-    const oldEdges = await tx.graphEdge.findMany({ where: { projectId } });
-    const oldJourneys = await tx.graphJourney.findMany({
-      where: { projectId },
-    });
-    for (const [old, incoming, limit] of [
-      [oldNodes, input.nodes, 5000],
-      [oldEdges, input.edges, 10000],
-      [oldJourneys, input.journeys, 2000],
-    ] as const) {
-      if (
-        new Set([...old.map((x) => x.key), ...incoming.map((x) => x.key)])
-          .size > limit
-      )
-        throw new Error(`Project graph limit exceeded (${limit})`);
-    }
-    const nodeKeys = new Set([
-      ...oldNodes.map((n) => n.key),
-      ...input.nodes.map((n) => n.key),
-    ]);
-    const changedNodes = new Set<string>();
-    for (const node of input.nodes) {
-      const data = {
-        ...node,
-        sourceRefs: JSON.stringify(node.sourceRefs),
-        revision: input.revision,
-      };
-      const old = oldNodes.find((n) => n.key === node.key);
-      if (
-        !old ||
-        old.revision !== input.revision ||
-        old.label !== node.label ||
-        old.sourceRefs !== data.sourceRefs ||
-        old.group !== node.group ||
-        old.kind !== node.kind
-      )
-        changedNodes.add(node.key);
-      await tx.graphNode.upsert({
-        where: { projectId_key: { projectId, key: node.key } },
-        create: { projectId, ...data },
-        update: data,
+  return prisma.$transaction(
+    async (tx) => {
+      const state = await tx.graphState.findUnique({ where: { projectId } });
+      if (!state) throw new Error("Call setup_project first");
+      if (state.leaseUntil && state.leaseUntil > new Date())
+        throw new Error(
+          "Audit in progress; retry discovery after its lease ends",
+        );
+      const changed = await tx.graphState.updateMany({
+        where: { projectId, version: input.expectedVersion },
+        data: {
+          version: { increment: 1 },
+          revision: input.revision,
+          revisionCommittedAt,
+          frontier: JSON.stringify(input.frontier),
+          discoveryStatus: input.discoveryStatus,
+        },
       });
-    }
-    const changedEdges = new Set(
-      oldEdges
-        .filter((e) => changedNodes.has(e.fromKey) || changedNodes.has(e.toKey))
-        .map((e) => e.key),
-    );
-    for (const edge of input.edges) {
-      if (!nodeKeys.has(edge.fromKey) || !nodeKeys.has(edge.toKey))
-        throw new Error("Edge endpoints must exist in this project");
-      const data = {
-        ...edge,
-        sourceRefs: JSON.stringify(edge.sourceRefs),
-        revision: input.revision,
-      };
-      const old = oldEdges.find((e) => e.key === edge.key);
-      if (
-        !old ||
-        old.revision !== input.revision ||
-        old.fromKey !== edge.fromKey ||
-        old.toKey !== edge.toKey ||
-        old.label !== edge.label ||
-        old.sourceRefs !== data.sourceRefs
-      )
-        changedEdges.add(edge.key);
-      await tx.graphEdge.upsert({
-        where: { projectId_key: { projectId, key: edge.key } },
-        create: { projectId, ...data },
-        update: data,
+      if (!changed.count)
+        throw new Error(
+          "Discovery version conflict; call setup_project and retry with the latest checkpoint",
+        );
+      const oldNodes = await tx.graphNode.findMany({ where: { projectId } });
+      const oldEdges = await tx.graphEdge.findMany({ where: { projectId } });
+      const oldJourneys = await tx.graphJourney.findMany({
+        where: { projectId },
       });
-    }
-    const edges = await tx.graphEdge.findMany({ where: { projectId } });
-    // Only paths touched by the submitted changed nodes or edges become stale.
-    // Verified journeys that are absent from a diff batch stay verified.
-    for (const journey of oldJourneys) {
-      if (
-        (JSON.parse(journey.edgeKeys) as string[]).some((k) =>
-          changedEdges.has(k),
+      for (const [old, incoming, limit] of [
+        [oldNodes, input.nodes, 5000],
+        [oldEdges, input.edges, 10000],
+        [oldJourneys, input.journeys, 2000],
+      ] as const) {
+        if (
+          new Set([...old.map((x) => x.key), ...incoming.map((x) => x.key)])
+            .size > limit
         )
-      ) {
-        await tx.graphJourney.update({
-          where: { id: journey.id },
-          data: { status: "stale", revision: input.revision },
+          throw new Error(`Project graph limit exceeded (${limit})`);
+      }
+      const nodeKeys = new Set([
+        ...oldNodes.map((n) => n.key),
+        ...input.nodes.map((n) => n.key),
+      ]);
+      const changedNodes = new Set<string>();
+      for (const node of input.nodes) {
+        const data = {
+          ...node,
+          sourceRefs: JSON.stringify(node.sourceRefs),
+          revision: input.revision,
+        };
+        const old = oldNodes.find((n) => n.key === node.key);
+        if (
+          !old ||
+          old.revision !== input.revision ||
+          old.label !== node.label ||
+          old.sourceRefs !== data.sourceRefs ||
+          old.group !== node.group ||
+          old.kind !== node.kind
+        )
+          changedNodes.add(node.key);
+        await tx.graphNode.upsert({
+          where: { projectId_key: { projectId, key: node.key } },
+          create: { projectId, ...data },
+          update: data,
         });
       }
-    }
-    for (const journey of input.journeys) {
-      const path = journey.edgeKeys.map((k) => edges.find((e) => e.key === k));
-      if (path.some((e) => !e))
-        throw new Error("Journey references an unknown edge");
-      if (path.some((e, i) => i > 0 && path[i - 1]!.toKey !== e!.fromKey))
-        throw new Error("Journey edges must form a connected ordered path");
-      const existing = oldJourneys.find((j) => j.key === journey.key);
-      if (existing && journey.flowId && journey.flowId !== existing.flowId)
-        throw new Error("Journey flow identity cannot change");
-      let flowId = existing?.flowId ?? journey.flowId;
-      if (
-        flowId &&
-        !(await tx.flow.findFirst({ where: { id: flowId, projectId } }))
-      )
-        throw new Error("Flow does not belong to this project");
-      if (
-        flowId &&
-        !existing &&
-        (await tx.graphJourney.findUnique({ where: { flowId } }))
-      )
-        throw new Error("Flow already belongs to a graph journey");
-      if (!flowId) {
-        const flow = await tx.flow.create({
-          data: {
-            projectId,
-            name: journey.name,
-            source: "ai-discovered",
-            steps: {
-              create: path.map((e, order) => ({
-                order,
-                description: e!.label,
-              })),
+      const changedEdges = new Set(
+        oldEdges
+          .filter(
+            (e) => changedNodes.has(e.fromKey) || changedNodes.has(e.toKey),
+          )
+          .map((e) => e.key),
+      );
+      for (const edge of input.edges) {
+        if (!nodeKeys.has(edge.fromKey) || !nodeKeys.has(edge.toKey))
+          throw new Error("Edge endpoints must exist in this project");
+        const data = {
+          ...edge,
+          sourceRefs: JSON.stringify(edge.sourceRefs),
+          revision: input.revision,
+        };
+        const old = oldEdges.find((e) => e.key === edge.key);
+        if (
+          !old ||
+          old.revision !== input.revision ||
+          old.fromKey !== edge.fromKey ||
+          old.toKey !== edge.toKey ||
+          old.label !== edge.label ||
+          old.sourceRefs !== data.sourceRefs
+        )
+          changedEdges.add(edge.key);
+        await tx.graphEdge.upsert({
+          where: { projectId_key: { projectId, key: edge.key } },
+          create: { projectId, ...data },
+          update: data,
+        });
+      }
+      const edges = await tx.graphEdge.findMany({ where: { projectId } });
+      // Only paths touched by the submitted changed nodes or edges become stale.
+      // Verified journeys that are absent from a diff batch stay verified.
+      for (const journey of oldJourneys) {
+        if (
+          (JSON.parse(journey.edgeKeys) as string[]).some((k) =>
+            changedEdges.has(k),
+          )
+        ) {
+          await tx.graphJourney.update({
+            where: { id: journey.id },
+            data: { status: "stale", revision: input.revision },
+          });
+        }
+      }
+      for (const journey of input.journeys) {
+        const path = journey.edgeKeys.map((k) =>
+          edges.find((e) => e.key === k),
+        );
+        if (path.some((e) => !e))
+          throw new Error("Journey references an unknown edge");
+        if (path.some((e, i) => i > 0 && path[i - 1]!.toKey !== e!.fromKey))
+          throw new Error("Journey edges must form a connected ordered path");
+        const existing = oldJourneys.find((j) => j.key === journey.key);
+        if (existing && journey.flowId && journey.flowId !== existing.flowId)
+          throw new Error("Journey flow identity cannot change");
+        let flowId = existing?.flowId ?? journey.flowId;
+        if (
+          flowId &&
+          !(await tx.flow.findFirst({ where: { id: flowId, projectId } }))
+        )
+          throw new Error("Flow does not belong to this project");
+        if (
+          flowId &&
+          !existing &&
+          (await tx.graphJourney.findUnique({ where: { flowId } }))
+        )
+          throw new Error("Flow already belongs to a graph journey");
+        if (!flowId) {
+          const flow = await tx.flow.create({
+            data: {
+              projectId,
+              name: journey.name,
+              source: "ai-discovered",
+              steps: {
+                create: path.map((e, order) => ({
+                  order,
+                  description: e!.label,
+                })),
+              },
             },
+          });
+          flowId = flow.id;
+        }
+        // Existing flows keep their step IDs/history. New paths get fresh steps only
+        // when their graph definition changes and no audit owns the graph.
+        const pathChanged =
+          existing && existing.edgeKeys !== JSON.stringify(journey.edgeKeys);
+        if (pathChanged) {
+          await tx.step.deleteMany({ where: { flowId } });
+          await tx.step.createMany({
+            data: path.map((e, order) => ({
+              flowId: flowId!,
+              order,
+              description: e!.label,
+            })),
+          });
+        }
+        await tx.graphJourney.upsert({
+          where: { projectId_key: { projectId, key: journey.key } },
+          create: {
+            projectId,
+            key: journey.key,
+            flowId,
+            edgeKeys: JSON.stringify(journey.edgeKeys),
+            revision: input.revision,
+          },
+          update: {
+            edgeKeys: JSON.stringify(journey.edgeKeys),
+            revision: input.revision,
+            ...(pathChanged ? { status: "stale" } : {}),
           },
         });
-        flowId = flow.id;
       }
-      // Existing flows keep their step IDs/history. New paths get fresh steps only
-      // when their graph definition changes and no audit owns the graph.
-      const pathChanged =
-        existing && existing.edgeKeys !== JSON.stringify(journey.edgeKeys);
-      if (pathChanged) {
-        await tx.step.deleteMany({ where: { flowId } });
-        await tx.step.createMany({
-          data: path.map((e, order) => ({
-            flowId: flowId!,
-            order,
-            description: e!.label,
-          })),
-        });
-      }
-      await tx.graphJourney.upsert({
-        where: { projectId_key: { projectId, key: journey.key } },
-        create: {
-          projectId,
-          key: journey.key,
-          flowId,
-          edgeKeys: JSON.stringify(journey.edgeKeys),
-          revision: input.revision,
-        },
-        update: {
-          edgeKeys: JSON.stringify(journey.edgeKeys),
-          revision: input.revision,
-          ...(pathChanged ? { status: "stale" } : {}),
-        },
-      });
-    }
-    return {
-      version: input.expectedVersion + 1,
-      discoveryStatus: input.discoveryStatus,
-    };
-  });
+      return {
+        version: input.expectedVersion + 1,
+        discoveryStatus: input.discoveryStatus,
+      };
+    },
+    // A full batch does one upsert per node/edge/journey (hundreds of
+    // sequential round trips over the Supabase pooler), which blows past
+    // Prisma's 5s default interactive-transaction timeout.
+    { timeout: 30_000, maxWait: 10_000 },
+  );
 }
 
 export async function claimAudit(projectId: string) {
