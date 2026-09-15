@@ -54,19 +54,19 @@ export default function LandingV2() {
       <main className={styles.hero}>
         <section className={styles.heroCopy}>
           <div className={styles.eyebrow}>
-            <span className={styles.statusDot} /> THE QUALITY LAYER FOR
-            AI-BUILT SOFTWARE
+            <span className={styles.statusDot} /> MCP-NATIVE QA FOR AI CODING
+            AGENTS
           </div>
 
           <h1 className={styles.heroH1}>
-            What&apos;s the most time-consuming part of building with AI?
-            <br />
-            <span>Testing.</span>
+            TestMyVibe — The Quality Layer for AI-Built Software
           </h1>
 
           <p className={styles.heroDescription}>
-            An AI QA that needs no hand-holding — it just works on its own to
-            find and fix the issues in your code.
+            TestMyVibe is an MCP server that helps AI coding agents audit
+            their own work — mapping your product into a feature graph,
+            generating real user journeys, and verifying each one against the
+            actual source before raising fixable issues.
           </p>
 
           <div className={styles.heroActions}>
