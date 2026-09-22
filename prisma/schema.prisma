@@ -142,6 +142,7 @@ model Issue {
   planSummary     String?
   autoApprove     Boolean   @default(false) // snapshot of the requester's choice for planned subtasks
   confidence      String?   // confirmed | likely | plausible, primarily for module risk reviews
+  fingerprint     String?   // stable dedupe key for scheduler-created issues
   pickedAt        DateTime?
   resolutionNotes String? // what the AI changed, reported via submit_issue_resolution
   reviewNotes     String? // human notes when reviewing/closing
@@ -151,6 +152,7 @@ model Issue {
   @@index([projectId, status, createdAt])
   @@index([runId])
   @@index([moduleId, createdAt])
+  @@unique([projectId, fingerprint])
 }
 
 model ApplicationModule {

@@ -1,4 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import {
@@ -7,6 +8,23 @@ import {
   saveGraphBatch,
   setupGraph,
 } from "@/lib/graph";
+
+function issueFingerprint(parts: {
+  source: "planned" | "module-review";
+  moduleId?: string | null;
+  category: string;
+  title: string;
+  filePath?: string | null;
+}) {
+  const normalized = [
+    parts.source,
+    parts.moduleId ?? "",
+    parts.category.trim().toLowerCase(),
+    parts.title.trim().toLowerCase().replace(/\s+/g, " "),
+    parts.filePath?.trim().toLowerCase() ?? "",
+  ].join("|");
+  return createHash("sha256").update(normalized).digest("hex");
+}
 
 const AUDIT_PLAYBOOK = `You are auditing a real codebase for TestMyVibe. Nothing here runs in a browser —
 you verify everything by reading the actual source code (routes, pages, components, API handlers).
@@ -22,7 +40,8 @@ Workflow:
    risks in security/privacy, auth, prompt or tool injection, provider/API-key handling, model configuration, data
    leakage, tenant isolation, reliability/fallbacks, retries/timeouts, validation, cost/rate limits, hallucination,
    observability, and performance. Report each risk with report_module_risk, including evidence, confidence, affected
-   files, and a complete fixPrompt. If a module has no plausible risk, call complete_module_review with that result.
+   files, and a complete fixPrompt. Do not re-report an existing equivalent risk. If a module has no plausible risk,
+   call complete_module_review with that result.
 3. Before auditing flows, repeatedly call claim_next_planning_issue for manually created requests.
    For each claimed request, inspect the actual repository source and use submit_issue_plan to save a concise plan
    plus independently executable subtasks. Each subtask needs a real file path where possible, acceptance criteria,
@@ -218,37 +237,44 @@ export function createMcpServer(token: string) {
     },
     async ({ revision, modules }) => {
       const project = await getProjectForToken(token);
-      const saved = await prisma.$transaction(async (tx) => {
-        const rows = [];
-        for (const module of modules) {
-          rows.push(await tx.applicationModule.upsert({
-            where: { projectId_name: { projectId: project.id, name: module.name } },
-            create: {
-              projectId: project.id,
-              name: module.name,
-              kind: module.kind,
-              description: module.description ?? null,
-              sourceRefs: JSON.stringify(module.sourceRefs),
-              revision: revision ?? null,
-              reviewStatus: "pending",
-              leaseUntil: null,
-              reviewedAt: null,
-              reviewSummary: null,
-            },
-            update: {
-              kind: module.kind,
-              description: module.description ?? null,
-              sourceRefs: JSON.stringify(module.sourceRefs),
-              revision: revision ?? null,
-              reviewStatus: "pending",
-              leaseUntil: null,
-              reviewedAt: null,
-              reviewSummary: null,
-            },
-          }));
-        }
-        return rows;
-      });
+      const saved = [];
+      for (const module of modules) {
+        const sourceRefs = JSON.stringify([...new Set(module.sourceRefs)].sort());
+        const existing = await prisma.applicationModule.findUnique({
+          where: { projectId_name: { projectId: project.id, name: module.name } },
+        });
+        const changed = !existing ||
+          existing.revision !== (revision ?? null) ||
+          existing.kind !== module.kind ||
+          existing.description !== (module.description ?? null) ||
+          existing.sourceRefs !== sourceRefs;
+        saved.push(existing
+          ? await prisma.applicationModule.update({
+              where: { id: existing.id },
+              data: {
+                kind: module.kind,
+                description: module.description ?? null,
+                sourceRefs,
+                revision: revision ?? null,
+                ...(changed ? {
+                  reviewStatus: "pending",
+                  leaseUntil: null,
+                  reviewedAt: null,
+                  reviewSummary: null,
+                } : {}),
+              },
+            })
+          : await prisma.applicationModule.create({
+              data: {
+                projectId: project.id,
+                name: module.name,
+                kind: module.kind,
+                description: module.description ?? null,
+                sourceRefs,
+                revision: revision ?? null,
+              },
+            }));
+      }
       return { content: [{ type: "text", text: JSON.stringify({ ok: true, moduleCount: saved.length, modules: saved.map((m) => ({ id: m.id, name: m.name, reviewStatus: m.reviewStatus })) }) }] };
     },
   );
@@ -306,7 +332,17 @@ export function createMcpServer(token: string) {
       const module = await prisma.applicationModule.findFirst({ where: { id: input.moduleId, projectId: project.id } });
       if (!module) throw new Error("Module not found for this project");
       if (module.reviewStatus !== "in_progress") throw new Error("Claim the module before reporting risks");
-      const issue = await prisma.issue.create({
+      const fingerprint = issueFingerprint({
+        source: "module-review",
+        moduleId: module.id,
+        category: input.category,
+        title: input.title,
+        filePath: input.filePath,
+      });
+      const existing = await prisma.issue.findUnique({
+        where: { projectId_fingerprint: { projectId: project.id, fingerprint } },
+      });
+      const issue = existing ?? await prisma.issue.create({
         data: {
           projectId: project.id,
           moduleId: module.id,
@@ -318,12 +354,18 @@ export function createMcpServer(token: string) {
           filePath: input.filePath ?? null,
           lineStart: input.lineStart ?? null,
           confidence: input.confidence,
+          fingerprint,
           source: "module-review",
           issueType: "task",
           status: project.autoApproveIssues ? "approved" : "pending",
         },
+      }).catch(async (error: unknown) => {
+        if ((error as { code?: string }).code !== "P2002") throw error;
+        return prisma.issue.findUniqueOrThrow({
+          where: { projectId_fingerprint: { projectId: project.id, fingerprint } },
+        });
       });
-      return { content: [{ type: "text", text: JSON.stringify({ issueId: issue.id, moduleId: module.id, status: issue.status, confidence: issue.confidence }) }] };
+      return { content: [{ type: "text", text: JSON.stringify({ issueId: issue.id, moduleId: module.id, status: issue.status, confidence: issue.confidence, deduplicated: !!existing }) }] };
     },
   );
 
@@ -684,30 +726,50 @@ export function createMcpServer(token: string) {
       const parent = await prisma.issue.findFirst({ where: { id: issueId, projectId: project.id, issueType: "request", planningStatus: "planning" } });
       if (!parent) throw new Error("Manual request is not available for planning");
       const status = parent.autoApprove ? "approved" : "pending";
-      const created = await prisma.$transaction(async (tx) => {
-        await tx.issue.update({ where: { id: parent.id }, data: {
+      await prisma.issue.update({ where: { id: parent.id }, data: {
           planningStatus: "planned",
           planSummary,
           fixPrompt: `Parent request planned. Complete the generated subtasks below.\n\n${planSummary}`,
           status,
-        } });
-        return Promise.all(subtasks.map((task) => tx.issue.create({ data: {
-          projectId: project.id,
-          parentId: parent.id,
-          severity: task.severity,
-          category: task.category,
-          title: task.title,
-          description: task.description,
-          fixPrompt: task.fixPrompt,
-          filePath: task.filePath ?? null,
-          lineStart: task.lineStart ?? null,
-          status,
-          source: "planned",
-          issueType: "task",
-          autoApprove: parent.autoApprove,
-        } })));
-      });
-      return { content: [{ type: "text", text: JSON.stringify({ ok: true, parentIssueId: parent.id, subtaskIds: created.map((i) => i.id), status }) }] };
+      } });
+      const results = await Promise.all(subtasks.map(async (task) => {
+          const fingerprint = issueFingerprint({
+            source: "planned",
+            category: task.category,
+            title: task.title,
+            filePath: task.filePath,
+          });
+          const existing = await prisma.issue.findUnique({
+            where: { projectId_fingerprint: { projectId: project.id, fingerprint } },
+          });
+          if (existing) {
+            return { issue: existing, reused: true };
+          }
+          try {
+            return { issue: await prisma.issue.create({ data: {
+              projectId: project.id,
+              parentId: parent.id,
+              severity: task.severity,
+              category: task.category,
+              title: task.title,
+              description: task.description,
+              fixPrompt: task.fixPrompt,
+              filePath: task.filePath ?? null,
+              lineStart: task.lineStart ?? null,
+              fingerprint,
+              status,
+              source: "planned",
+              issueType: "task",
+              autoApprove: parent.autoApprove,
+            } }), reused: false };
+          } catch (error) {
+            if ((error as { code?: string }).code !== "P2002") throw error;
+            return { issue: await prisma.issue.findUniqueOrThrow({
+              where: { projectId_fingerprint: { projectId: project.id, fingerprint } },
+            }), reused: true };
+          }
+      }));
+      return { content: [{ type: "text", text: JSON.stringify({ ok: true, parentIssueId: parent.id, subtaskIds: results.map(({ issue }) => issue.id), status, reusedSubtasks: results.filter(({ reused }) => reused).length }) }] };
     },
   );
 
