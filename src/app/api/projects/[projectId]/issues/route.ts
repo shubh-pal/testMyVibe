@@ -1,6 +1,13 @@
 import { authorize } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { z } from "zod";
+
+const createIssueInput = z.object({
+  title: z.string().trim().min(1).max(200),
+  description: z.string().trim().min(1).max(10000),
+  autoApprove: z.boolean().default(false),
+});
 
 export async function GET(
   _req: Request,
@@ -26,9 +33,45 @@ export async function GET(
       lineStart: i.lineStart,
       createdAt: i.createdAt,
       updatedAt: i.updatedAt,
-      flowId: i.run.flow.id,
-      flowName: i.run.flow.name,
+      flowId: i.run?.flow.id ?? null,
+      flowName: i.run?.flow.name ?? "Manual request",
       runId: i.runId,
+      source: i.source,
+      issueType: i.issueType,
+      parentId: i.parentId,
+      planningStatus: i.planningStatus,
+      planSummary: i.planSummary,
+      autoApprove: i.autoApprove,
     })),
   );
+}
+
+export async function POST(
+  req: Request,
+  { params }: { params: Promise<{ projectId: string }> },
+) {
+  const denied = await authorize(req);
+  if (denied) return denied;
+  const { projectId } = await params;
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  if (!project) return NextResponse.json({ error: "not found" }, { status: 404 });
+  const parsed = createIssueInput.safeParse(await req.json().catch(() => null));
+  if (!parsed.success)
+    return NextResponse.json({ error: "Provide a title and description" }, { status: 400 });
+  const issue = await prisma.issue.create({
+    data: {
+      projectId,
+      severity: "medium",
+      category: "feature-request",
+      title: parsed.data.title,
+      description: parsed.data.description,
+      fixPrompt: "Awaiting AI planning after source-code audit.",
+      status: parsed.data.autoApprove ? "approved" : "pending",
+      source: "manual",
+      issueType: "request",
+      planningStatus: "unplanned",
+      autoApprove: parsed.data.autoApprove,
+    },
+  });
+  return NextResponse.json(issue, { status: 201 });
 }

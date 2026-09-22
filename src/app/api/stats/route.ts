@@ -33,15 +33,15 @@ export async function GET(req: Request) {
     flowCount,
     runCount,
     issueCounts: statusCounts,
-    recentIssues: recentIssues.map((i) => ({
+    recentIssues: recentIssues.filter((i) => i.run).map((i) => ({
       id: i.id,
       title: i.title,
       severity: i.severity,
       status: i.status,
       createdAt: i.createdAt,
-      projectId: i.run.flow.projectId,
-      projectName: i.run.flow.project.name,
-      flowName: i.run.flow.name,
+      projectId: i.run!.flow.projectId,
+      projectName: i.run!.flow.project.name,
+      flowName: i.run!.flow.name,
     })),
   });
 }

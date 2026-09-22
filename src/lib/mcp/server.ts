@@ -12,9 +12,14 @@ const AUDIT_PLAYBOOK = `You are auditing a real codebase for TestMyVibe. Nothing
 you verify everything by reading the actual source code (routes, pages, components, API handlers).
 
 Workflow:
-1. Call get_project. Read the current Git commit SHA and committed date from the repository already open in your
+1. Call get_project. Before auditing flows, repeatedly call claim_next_planning_issue for manually created requests.
+   For each claimed request, inspect the actual repository source and use submit_issue_plan to save a concise plan
+   plus independently executable subtasks. Each subtask needs a real file path where possible, acceptance criteria,
+   and a complete coding-agent prompt. Never fix code in planning mode. Subtasks are approval-gated unless the
+   request's auto-approve option was enabled.
+2. Read the current Git commit SHA and committed date from the repository already open in your
    workspace. Call setup_project with currentRevision and currentRevisionAt. Follow nextAction exactly.
-2. If nextAction is "audit_pending", call claim_next_audit and audit the claimed journey. Keep claiming pending
+3. If nextAction is "audit_pending", call claim_next_audit and audit the claimed journey. Keep claiming pending
    journeys until the queue is empty or the run's time budget is nearly exhausted. Never re-audit verified journeys.
 3. If nextAction is "up_to_date", stop quietly. The last completely audited commit is already the current commit.
 4. If nextAction is "discover_changes", inspect only changes between lastAuditedRevision and currentRevision. If it is
@@ -81,14 +86,21 @@ export function createMcpServer(token: string) {
     },
     async () => {
       const project = await getProjectForToken(token);
-      const flows = await prisma.flow.findMany({
+      const [flows, manualRequests] = await Promise.all([
+        prisma.flow.findMany({
         where: { projectId: project.id },
         include: {
           steps: { orderBy: { order: "asc" } },
           _count: { select: { runs: true } },
         },
         orderBy: { createdAt: "asc" },
-      });
+        }),
+        prisma.issue.findMany({
+          where: { projectId: project.id, issueType: "request", planningStatus: { in: ["unplanned", "planning"] } },
+          orderBy: { createdAt: "asc" },
+          select: { id: true, title: true, description: true, status: true, planningStatus: true, autoApprove: true },
+        }),
+      ]);
       return {
         content: [
           {
@@ -102,6 +114,7 @@ export function createMcpServer(token: string) {
                   autoApproveIssues: project.autoApproveIssues,
                   autoCloseIssues: project.autoCloseIssues,
                 },
+                manualRequests,
                 existingFlows: flows.map((f) => ({
                   id: f.id,
                   name: f.name,
@@ -410,6 +423,87 @@ export function createMcpServer(token: string) {
   );
 
   server.registerTool(
+    "claim_next_planning_issue",
+    {
+      title: "Claim the next manual request to plan",
+      description:
+        "Atomically claim the oldest unplanned manual request. Read the repository and issue description before submitting a source-audited implementation plan.",
+      inputSchema: {},
+    },
+    async () => {
+      const project = await getProjectForToken(token);
+      const next = await prisma.issue.findFirst({
+        where: { projectId: project.id, issueType: "request", planningStatus: "unplanned" },
+        orderBy: { createdAt: "asc" },
+      });
+      if (!next) return { content: [{ type: "text", text: JSON.stringify({ issue: null }) }] };
+      const claimed = await prisma.issue.updateMany({
+        where: { id: next.id, planningStatus: "unplanned" },
+        data: { planningStatus: "planning" },
+      });
+      if (!claimed.count) return { content: [{ type: "text", text: JSON.stringify({ issue: null, note: "contention, try again" }) }] };
+      return {
+        content: [{ type: "text", text: JSON.stringify({
+          issue: { id: next.id, title: next.title, description: next.description, autoApprove: next.autoApprove },
+          instructions: "Inspect the actual source code, identify files and dependencies, and split the work into independently executable subtasks with complete coding-agent prompts.",
+        }, null, 2) }],
+      };
+    },
+  );
+
+  server.registerTool(
+    "submit_issue_plan",
+    {
+      title: "Save a source-audited issue plan",
+      description:
+        "Update a claimed manual request with the implementation plan and create executable subtasks. Subtasks remain pending unless the request's auto-approve option was enabled.",
+      inputSchema: {
+        issueId: z.string(),
+        planSummary: z.string().min(1).max(20000),
+        subtasks: z.array(z.object({
+          title: z.string().min(1).max(200),
+          description: z.string().min(1).max(10000),
+          fixPrompt: z.string().min(1).max(30000),
+          severity: z.enum(["critical", "high", "medium", "low"]).default("medium"),
+          category: z.string().min(1).max(80).default("other"),
+          filePath: z.string().max(500).optional(),
+          lineStart: z.number().int().optional(),
+        })).min(1).max(30),
+      },
+    },
+    async ({ issueId, planSummary, subtasks }) => {
+      const project = await getProjectForToken(token);
+      const parent = await prisma.issue.findFirst({ where: { id: issueId, projectId: project.id, issueType: "request", planningStatus: "planning" } });
+      if (!parent) throw new Error("Manual request is not available for planning");
+      const status = parent.autoApprove ? "approved" : "pending";
+      const created = await prisma.$transaction(async (tx) => {
+        await tx.issue.update({ where: { id: parent.id }, data: {
+          planningStatus: "planned",
+          planSummary,
+          fixPrompt: `Parent request planned. Complete the generated subtasks below.\n\n${planSummary}`,
+          status,
+        } });
+        return Promise.all(subtasks.map((task) => tx.issue.create({ data: {
+          projectId: project.id,
+          parentId: parent.id,
+          severity: task.severity,
+          category: task.category,
+          title: task.title,
+          description: task.description,
+          fixPrompt: task.fixPrompt,
+          filePath: task.filePath ?? null,
+          lineStart: task.lineStart ?? null,
+          status,
+          source: "planned",
+          issueType: "task",
+          autoApprove: parent.autoApprove,
+        } })));
+      });
+      return { content: [{ type: "text", text: JSON.stringify({ ok: true, parentIssueId: parent.id, subtaskIds: created.map((i) => i.id), status }) }] };
+    },
+  );
+
+  server.registerTool(
     "claim_next_issue",
     {
       title: "Claim the next approved issue to fix",
@@ -426,7 +520,7 @@ export function createMcpServer(token: string) {
       // retry. That compare-and-swap is what makes this safe under
       // concurrent callers, not any assumption about the database engine.
       const next = await prisma.issue.findFirst({
-        where: { projectId: project.id, status: "approved" },
+        where: { projectId: project.id, status: "approved", issueType: "task" },
         orderBy: { createdAt: "asc" },
         include: { run: { include: { flow: true } } },
       });
@@ -436,7 +530,7 @@ export function createMcpServer(token: string) {
         };
       }
       const { count } = await prisma.issue.updateMany({
-        where: { id: next.id, status: "approved" },
+        where: { id: next.id, status: "approved", issueType: "task" },
         data: { status: "in_progress", pickedAt: new Date() },
       });
       if (count === 0) {
@@ -469,7 +563,7 @@ export function createMcpServer(token: string) {
                   fixPrompt: next.fixPrompt,
                   filePath: next.filePath,
                   lineStart: next.lineStart,
-                  flowName: next.run.flow.name,
+                  flowName: next.run?.flow.name ?? "Planned task",
                 },
               },
               null,

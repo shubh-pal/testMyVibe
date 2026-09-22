@@ -114,9 +114,9 @@ model StepResult {
 // approved to try again.
 model Issue {
   id              String    @id @default(cuid())
-  runId           String
-  run             Run       @relation(fields: [runId], references: [id], onDelete: Cascade)
-  projectId       String? // denormalized from run.flow.projectId for fast board queries
+  runId           String?
+  run             Run?      @relation(fields: [runId], references: [id], onDelete: Cascade)
+  projectId       String // denormalized from run.flow.projectId for fast board queries
   severity        String // critical | high | medium | low
   category        String // missing-navigation | broken-link | validation | error-handling | auth | api-mismatch | accessibility | other
   title           String
@@ -126,6 +126,14 @@ model Issue {
   lineStart       Int?
   stepOrder       Int?
   status          String    @default("pending") // pending | approved | rejected | in_progress | in_review | done
+  source          String    @default("audit") // audit | manual | planned
+  issueType       String    @default("task") // request | task
+  parentId        String?
+  parent          Issue?    @relation("IssuePlan", fields: [parentId], references: [id], onDelete: Cascade)
+  children        Issue[]   @relation("IssuePlan")
+  planningStatus  String    @default("not_required") // not_required | unplanned | planning | planned
+  planSummary     String?
+  autoApprove     Boolean   @default(false) // snapshot of the requester's choice for planned subtasks
   pickedAt        DateTime?
   resolutionNotes String? // what the AI changed, reported via submit_issue_resolution
   reviewNotes     String? // human notes when reviewing/closing

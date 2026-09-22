@@ -20,6 +20,12 @@ interface IssueCard {
   flowId: string;
   flowName: string;
   runId: string;
+  source: string;
+  issueType: string;
+  parentId: string | null;
+  planningStatus: string;
+  planSummary: string | null;
+  autoApprove: boolean;
 }
 
 const COLUMNS: { key: string; label: string }[] = [
@@ -56,6 +62,7 @@ export default function IssuesBoard({
     searchParams.get("issue"),
   );
   const [dragOverCol, setDragOverCol] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -103,13 +110,20 @@ export default function IssuesBoard({
   return (
     <div className="flex flex-col gap-6 h-full">
       <div>
-        <h1 className="text-2xl font-semibold">Issue board</h1>
-        <p className="text-neutral-500 text-sm mt-1">
-          Approve or reject what your AI finds. Once approved, ask it to
-          &quot;work through approved issues&quot; — it claims the queue via MCP
-          and submits fixes. Configure auto-approval and auto-close in project
-          settings.
-        </p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold">Issue board</h1>
+            <p className="text-neutral-500 text-sm mt-1">
+              Approve or reject what your AI finds. Once approved, ask it to
+              &quot;work through approved issues&quot; — it claims the queue via MCP
+              and submits fixes. Configure auto-approval and auto-close in project
+              settings.
+            </p>
+          </div>
+          <button className="btn-primary shrink-0" onClick={() => setShowCreate(true)}>
+            + Create issue
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -282,6 +296,16 @@ export default function IssuesBoard({
           onChanged={load}
         />
       )}
+      {showCreate && (
+        <CreateIssueModal
+          projectId={projectId}
+          onClose={() => setShowCreate(false)}
+          onCreated={() => {
+            setShowCreate(false);
+            void load();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -302,7 +326,57 @@ interface IssueDetail extends IssueCard {
       status: string;
       notes: string | null;
     }[];
-  };
+  } | null;
+  parent: { id: string; title: string } | null;
+  children: IssueCard[];
+}
+
+function CreateIssueModal({
+  projectId,
+  onClose,
+  onCreated,
+}: {
+  projectId: string;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [autoApprove, setAutoApprove] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/projects/${projectId}/issues`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, description, autoApprove }),
+      });
+      if (!response.ok) throw new Error((await response.json()).error ?? "Could not create issue");
+      onCreated();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not create issue");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Modal title="Create an issue or feature request" onClose={onClose}>
+      <form className="flex flex-col gap-4" onSubmit={submit}>
+        <p className="text-sm text-neutral-400">
+          Give the scheduler a short request. It will inspect the code, write a plan, and create approval-ready subtasks.
+        </p>
+        <label className="text-sm">Title<input className="input mt-1" required maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Add CSV export to the leads table" /></label>
+        <label className="text-sm">Description<textarea className="input mt-1 min-h-28" required maxLength={10000} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="One or two lines about what you need and why…" /></label>
+        <label className="flex items-start gap-3 text-sm text-neutral-300"><input type="checkbox" className="mt-1 accent-blue-500" checked={autoApprove} onChange={(e) => setAutoApprove(e.target.checked)} /><span><strong>Auto-approve the generated plan</strong><span className="block text-xs text-neutral-500 mt-1">The AI may pick up generated subtasks without a separate approval step.</span></span></label>
+        {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
+        <div className="flex justify-end gap-2 pt-2"><button type="button" className="btn-secondary" onClick={onClose}>Cancel</button><button className="btn-primary" disabled={busy}>{busy ? "Creating…" : "Create issue"}</button></div>
+      </form>
+    </Modal>
+  );
 }
 
 function IssueDetailModal({
@@ -384,9 +458,9 @@ function IssueDetailModal({
           <div className="grid sm:grid-cols-2 gap-3 text-sm">
             <div>
               <p className="text-xs text-neutral-500">Flow</p>
-              <p>{issue.run.flow.name}</p>
+              <p>{issue.run?.flow.name ?? "Manual request"}</p>
             </div>
-            <div>
+            {issue.run && <div>
               <p className="text-xs text-neutral-500">Audit run</p>
               <a
                 href={`/runs/${issue.run.id}`}
@@ -394,7 +468,7 @@ function IssueDetailModal({
               >
                 {new Date(issue.run.startedAt).toLocaleString()}
               </a>
-            </div>
+            </div>}
             {issue.filePath && (
               <div>
                 <p className="text-xs text-neutral-500">File</p>
@@ -409,13 +483,27 @@ function IssueDetailModal({
                 <p className="text-xs text-neutral-500">Step</p>
                 <p>
                   #{issue.stepOrder + 1} —{" "}
-                  {issue.run.stepResults.find(
+                  {issue.run?.stepResults.find(
                     (s) => s.order === issue.stepOrder,
                   )?.description ?? ""}
                 </p>
               </div>
             )}
           </div>
+
+          {issue.planSummary && (
+            <div className="rounded-lg bg-indigo-500/5 border border-indigo-500/20 p-3">
+              <p className="text-xs text-indigo-300 mb-1">AI implementation plan</p>
+              <p className="text-sm text-neutral-300 whitespace-pre-wrap">{issue.planSummary}</p>
+            </div>
+          )}
+
+          {issue.children?.length > 0 && (
+            <div className="rounded-lg bg-neutral-950 border border-neutral-800 p-3">
+              <p className="text-xs text-neutral-500 mb-2">Generated subtasks</p>
+              <div className="flex flex-col gap-2">{issue.children.map((child) => <div key={child.id} className="flex items-center justify-between gap-3 text-sm"><span>{child.title}</span><span className="badge bg-neutral-800 text-neutral-400">{child.status.replace("_", " ")}</span></div>)}</div>
+            </div>
+          )}
 
           <div className="rounded-lg bg-neutral-950 border border-neutral-800 p-3">
             <div className="flex items-center justify-between mb-1">

@@ -108,9 +108,9 @@ export async function authorize(req: Request) {
       (
         await prisma.issue.findUnique({
           where: { id },
-          include: { run: { include: { flow: true } } },
+          select: { projectId: true },
         })
-      )?.run.flow.projectId ?? "";
+      )?.projectId ?? "";
   if (parts[2] === "runs" && id)
     projectId =
       (await prisma.run.findUnique({ where: { id }, include: { flow: true } }))

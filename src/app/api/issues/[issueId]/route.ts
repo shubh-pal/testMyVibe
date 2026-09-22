@@ -28,6 +28,8 @@ export async function GET(
           stepResults: { orderBy: { order: "asc" } },
         },
       },
+      parent: { select: { id: true, title: true } },
+      children: { orderBy: { createdAt: "asc" } },
     },
   });
   if (!issue) return NextResponse.json({ error: "not found" }, { status: 404 });
