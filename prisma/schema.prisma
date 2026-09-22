@@ -46,6 +46,7 @@ model Project {
   graphNodes    GraphNode[]
   graphEdges    GraphEdge[]
   graphJourneys GraphJourney[]
+  modules     ApplicationModule[]
   mcpEvents     McpEvent[]
 }
 
@@ -62,6 +63,8 @@ model Flow {
   graphJourney GraphJourney?
   steps        Step[]
   runs         Run[]
+
+  @@index([projectId])
 }
 
 // A plain-English step in a user journey, e.g.:
@@ -92,6 +95,8 @@ model Run {
   evidenceType  String       @default("source")
   stepResults   StepResult[]
   issues        Issue[]
+
+  @@index([flowId, startedAt])
 }
 
 model StepResult {
@@ -116,6 +121,8 @@ model Issue {
   id              String    @id @default(cuid())
   runId           String?
   run             Run?      @relation(fields: [runId], references: [id], onDelete: Cascade)
+  moduleId        String?
+  module          ApplicationModule? @relation(fields: [moduleId], references: [id], onDelete: SetNull)
   projectId       String // denormalized from run.flow.projectId for fast board queries
   severity        String // critical | high | medium | low
   category        String // missing-navigation | broken-link | validation | error-handling | auth | api-mismatch | accessibility | other
@@ -134,11 +141,37 @@ model Issue {
   planningStatus  String    @default("not_required") // not_required | unplanned | planning | planned
   planSummary     String?
   autoApprove     Boolean   @default(false) // snapshot of the requester's choice for planned subtasks
+  confidence      String?   // confirmed | likely | plausible, primarily for module risk reviews
   pickedAt        DateTime?
   resolutionNotes String? // what the AI changed, reported via submit_issue_resolution
   reviewNotes     String? // human notes when reviewing/closing
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+
+  @@index([projectId, status, createdAt])
+  @@index([runId])
+  @@index([moduleId, createdAt])
+}
+
+model ApplicationModule {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name        String
+  kind        String   @default("application")
+  description String?
+  sourceRefs  String   @default("[]")
+  revision    String?
+  reviewStatus String  @default("pending") // pending | in_progress | reviewed
+  leaseUntil  DateTime?
+  reviewedAt  DateTime?
+  reviewSummary String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  issues      Issue[]
+
+  @@unique([projectId, name])
+  @@index([projectId, reviewStatus, updatedAt])
 }
 
 model Workspace {

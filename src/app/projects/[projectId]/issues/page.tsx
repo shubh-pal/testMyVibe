@@ -26,6 +26,8 @@ interface IssueCard {
   planningStatus: string;
   planSummary: string | null;
   autoApprove: boolean;
+  module?: { id: string; name: string; kind: string } | null;
+  confidence?: string | null;
 }
 
 const COLUMNS: { key: string; label: string }[] = [
@@ -370,7 +372,7 @@ function CreateIssueModal({
           Give the scheduler a short request. It will inspect the code, write a plan, and create approval-ready subtasks.
         </p>
         <label className="text-sm">Title<input className="input mt-1" required maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Add CSV export to the leads table" /></label>
-        <label className="text-sm">Description<textarea className="input mt-1 min-h-28" required maxLength={10000} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="One or two lines about what you need and why…" /></label>
+        <label className="text-sm">Description <span className="text-neutral-500">(optional)</span><textarea className="input mt-1 min-h-28" maxLength={10000} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Add context about what you need and why…" /></label>
         <label className="flex items-start gap-3 text-sm text-neutral-300"><input type="checkbox" className="mt-1 accent-blue-500" checked={autoApprove} onChange={(e) => setAutoApprove(e.target.checked)} /><span><strong>Auto-approve the generated plan</strong><span className="block text-xs text-neutral-500 mt-1">The AI may pick up generated subtasks without a separate approval step.</span></span></label>
         {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
         <div className="flex justify-end gap-2 pt-2"><button type="button" className="btn-secondary" onClick={onClose}>Cancel</button><button className="btn-primary" disabled={busy}>{busy ? "Creating…" : "Create issue"}</button></div>
@@ -454,6 +456,14 @@ function IssueDetailModal({
 
           <h3 className="text-lg font-medium">{issue.title}</h3>
           <p className="text-sm text-neutral-400">{issue.description}</p>
+
+          {issue.module && (
+            <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-400">
+              <span className="badge bg-indigo-500/10 text-indigo-300">Module risk</span>
+              <span>{issue.module.name} · {issue.module.kind}</span>
+              {issue.confidence && <span className="badge bg-neutral-800 text-neutral-400">{issue.confidence} confidence</span>}
+            </div>
+          )}
 
           <div className="grid sm:grid-cols-2 gap-3 text-sm">
             <div>

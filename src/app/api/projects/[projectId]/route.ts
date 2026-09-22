@@ -12,14 +12,19 @@ export async function GET(
   const denied = await authorize(_req);
   if (denied) return denied;
   const { projectId } = await params;
+  const summary = new URL(_req.url).searchParams.get("summary") === "1";
   const project = await prisma.project.findUnique({
     where: { id: projectId },
-    include: {
-      flows: {
-        include: { _count: { select: { runs: true } } },
-        orderBy: { createdAt: "asc" },
-      },
-    },
+    ...(summary
+      ? {}
+      : {
+          include: {
+            flows: {
+              include: { _count: { select: { runs: true } } },
+              orderBy: { createdAt: "asc" },
+            },
+          },
+        }),
   });
   if (!project)
     return NextResponse.json({ error: "not found" }, { status: 404 });

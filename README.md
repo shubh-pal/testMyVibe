@@ -18,14 +18,27 @@ npm run dev
 
 Open http://localhost:3000, create an account and workspace, then name a project. Open **AI connection** in that project for client setup and the MCP diagnostic. Your AI agent audits the repository already open in its workspace; TestMyVibe does not collect a local path or repository URL and cannot read your files itself.
 
+### Operate the live project from a local checkout
+
+The app is database-backed, so a local server can operate the same live projects when it connects to the live Postgres database. Copy the live deployment's `DATABASE_URL` and `DIRECT_URL` into the local `.env`, run pending migrations before starting the app, and sign in with the existing live account:
+
+```sh
+npx prisma migrate deploy
+npx prisma generate
+npm run dev
+```
+
+Use the same account email and password as the deployed app. Workspace and project access remains enforced by the signed-in user's workspace; pointing at the live database does not grant access to another workspace. Keep the live database credentials only in the local untracked `.env` file, and use a database backup or staging database for destructive experiments.
+
 ## Quality workflow
 
 1. Connect your coding agent and ask it to call `get_project`.
-2. Discover user flows; reuse existing flows on subsequent audits.
-3. Audit each step against source and report concrete evidence.
-4. Review findings on the issue board and approve or reject them.
-5. Ask your agent to claim approved issues, make fixes, and submit resolutions.
-6. Review the changes and mark them done, or send them back.
+2. Inventory application modules with `save_module_inventory`, then review each module for source-backed security, AI, reliability, data, cost, and performance risks.
+3. Discover user flows; reuse existing flows on subsequent audits.
+4. Audit each step against source and report concrete evidence.
+5. Review findings on the issue board and approve or reject them.
+6. Ask your agent to claim approved issues, make fixes, and submit resolutions.
+7. Review the changes and mark them done, or send them back.
 
 Audits are source inspections, not browser execution. The external agent performs all code reading, edits, and tests. The dashboard stores evidence and decisions.
 

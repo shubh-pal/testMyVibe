@@ -20,14 +20,50 @@ export function verifyPassword(password: string, hash: string) {
 }
 const digest = (token: string) =>
   createHash("sha256").update(token).digest("hex");
+
+type CachedUser = {
+  user: NonNullable<Awaited<ReturnType<typeof loadSession>>>["user"];
+  expiresAt: number;
+  cachedUntil: number;
+};
+const userCache = new Map<string, CachedUser>();
+const userLoads = new Map<string, ReturnType<typeof loadSession>>();
+const projectAccessCache = new Map<string, number>();
+const USER_CACHE_TTL_MS = 5_000;
+
+async function loadSession(sessionId: string) {
+  return prisma.session.findUnique({
+    where: { id: sessionId },
+    include: { user: { include: { workspace: true } } },
+  });
+}
+
 export async function currentUser() {
   const token = (await cookies()).get("tmv_session")?.value;
   if (!token) return null;
-  const session = await prisma.session.findUnique({
-    where: { id: digest(token) },
-    include: { user: { include: { workspace: true } } },
+  const sessionId = digest(token);
+  const cached = userCache.get(sessionId);
+  const now = Date.now();
+  if (cached && cached.cachedUntil > now && cached.expiresAt > now)
+    return cached.user;
+  let sessionPromise = userLoads.get(sessionId);
+  if (!sessionPromise) {
+    sessionPromise = loadSession(sessionId);
+    userLoads.set(sessionId, sessionPromise);
+    void sessionPromise.finally(() => userLoads.delete(sessionId));
+  }
+  const session = await sessionPromise;
+  if (!session || session.expiresAt <= new Date()) {
+    userCache.delete(sessionId);
+    return null;
+  }
+  userCache.set(sessionId, {
+    user: session.user,
+    expiresAt: session.expiresAt.getTime(),
+    cachedUntil: now + USER_CACHE_TTL_MS,
   });
-  return session && session.expiresAt > new Date() ? session.user : null;
+  if (userCache.size > 1000) userCache.delete(userCache.keys().next().value!);
+  return session.user;
 }
 export async function createSession(userId: string) {
   const token = randomBytes(32).toString("hex");
@@ -63,7 +99,12 @@ export async function requireSuperAdmin() {
 export async function logout() {
   const jar = await cookies();
   const token = jar.get("tmv_session")?.value;
-  if (token) await prisma.session.deleteMany({ where: { id: digest(token) } });
+  if (token) {
+    const sessionId = digest(token);
+    userCache.delete(sessionId);
+    userLoads.delete(sessionId);
+    await prisma.session.deleteMany({ where: { id: sessionId } });
+  }
   jar.delete("tmv_session");
 }
 export function sameOrigin(req: Request) {
@@ -115,12 +156,19 @@ export async function authorize(req: Request) {
     projectId =
       (await prisma.run.findUnique({ where: { id }, include: { flow: true } }))
         ?.flow.projectId ?? "";
-  if (
-    projectId !== undefined &&
-    !(await prisma.project.findFirst({
-      where: { id: projectId, workspaceId: user.workspaceId },
-    }))
-  )
-    return Response.json({ error: "Not found" }, { status: 404 });
+  if (projectId !== undefined) {
+    const accessKey = `${user.workspaceId}:${projectId}`;
+    const now = Date.now();
+    const cachedAccessUntil = projectAccessCache.get(accessKey);
+    if (!cachedAccessUntil || cachedAccessUntil <= now) {
+      const project = await prisma.project.findFirst({
+        where: { id: projectId, workspaceId: user.workspaceId },
+        select: { id: true },
+      });
+      if (!project)
+        return Response.json({ error: "Not found" }, { status: 404 });
+      projectAccessCache.set(accessKey, now + USER_CACHE_TTL_MS);
+    }
+  }
   return null;
 }

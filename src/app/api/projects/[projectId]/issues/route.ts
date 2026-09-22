@@ -5,7 +5,7 @@ import { z } from "zod";
 
 const createIssueInput = z.object({
   title: z.string().trim().min(1).max(200),
-  description: z.string().trim().min(1).max(10000),
+  description: z.string().trim().max(10000).optional().default(""),
   autoApprove: z.boolean().default(false),
 });
 
@@ -19,7 +19,7 @@ export async function GET(
   const issues = await prisma.issue.findMany({
     where: { projectId },
     orderBy: { createdAt: "asc" },
-    include: { run: { include: { flow: true } } },
+    include: { run: { include: { flow: true } }, module: { select: { id: true, name: true, kind: true } } },
   });
   return NextResponse.json(
     issues.map((i) => ({
@@ -42,6 +42,8 @@ export async function GET(
       planningStatus: i.planningStatus,
       planSummary: i.planSummary,
       autoApprove: i.autoApprove,
+      module: i.module,
+      confidence: i.confidence,
     })),
   );
 }
@@ -64,7 +66,8 @@ export async function POST(
       severity: "medium",
       category: "feature-request",
       title: parsed.data.title,
-      description: parsed.data.description,
+      description:
+        parsed.data.description || "No additional description provided.",
       fixPrompt: "Awaiting AI planning after source-code audit.",
       status: parsed.data.autoApprove ? "approved" : "pending",
       source: "manual",

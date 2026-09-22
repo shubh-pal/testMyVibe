@@ -12,14 +12,25 @@ const AUDIT_PLAYBOOK = `You are auditing a real codebase for TestMyVibe. Nothing
 you verify everything by reading the actual source code (routes, pages, components, API handlers).
 
 Workflow:
-1. Call get_project. Before auditing flows, repeatedly call claim_next_planning_issue for manually created requests.
+1. Call get_project, then call list_feature_graph_modules. First inventory the application modules. Reconcile every
+   feature-graph group and node with the repository structure; use graph:<node-key> alongside code references in
+   sourceRefs for each module it covers. Inspect repository entry points, package boundaries,
+   backend services, API clients, AI/provider integrations, persistence, auth, queues/jobs, and important UI domains.
+   Call save_module_inventory with stable module names, short descriptions, module kinds, source references, and the
+   current Git revision. Do not invent modules; every module must have source evidence.
+2. Call claim_next_module_review and inspect each claimed module's real source code. Look for plausible, source-backed
+   risks in security/privacy, auth, prompt or tool injection, provider/API-key handling, model configuration, data
+   leakage, tenant isolation, reliability/fallbacks, retries/timeouts, validation, cost/rate limits, hallucination,
+   observability, and performance. Report each risk with report_module_risk, including evidence, confidence, affected
+   files, and a complete fixPrompt. If a module has no plausible risk, call complete_module_review with that result.
+3. Before auditing flows, repeatedly call claim_next_planning_issue for manually created requests.
    For each claimed request, inspect the actual repository source and use submit_issue_plan to save a concise plan
    plus independently executable subtasks. Each subtask needs a real file path where possible, acceptance criteria,
    and a complete coding-agent prompt. Never fix code in planning mode. Subtasks are approval-gated unless the
    request's auto-approve option was enabled.
-2. Read the current Git commit SHA and committed date from the repository already open in your
+4. Read the current Git commit SHA and committed date from the repository already open in your
    workspace. Call setup_project with currentRevision and currentRevisionAt. Follow nextAction exactly.
-3. If nextAction is "audit_pending", call claim_next_audit and audit the claimed journey. Keep claiming pending
+5. If nextAction is "audit_pending", call claim_next_audit and audit the claimed journey. Keep claiming pending
    journeys until the queue is empty or the run's time budget is nearly exhausted. Never re-audit verified journeys.
 3. If nextAction is "up_to_date", stop quietly. The last completely audited commit is already the current commit.
 4. If nextAction is "discover_changes", inspect only changes between lastAuditedRevision and currentRevision. If it is
@@ -81,12 +92,12 @@ export function createMcpServer(token: string) {
     {
       title: "Get project info",
       description:
-        "Get the project's existing flows and audit playbook. Call this first; inspect the repository already open in your own workspace.",
+        "Get the project's existing flows, module reviews, and audit playbook. Call this first; then list feature-graph modules before inspecting the repository.",
       inputSchema: {},
     },
     async () => {
       const project = await getProjectForToken(token);
-      const [flows, manualRequests] = await Promise.all([
+      const [flows, manualRequests, modules] = await Promise.all([
         prisma.flow.findMany({
         where: { projectId: project.id },
         include: {
@@ -99,6 +110,11 @@ export function createMcpServer(token: string) {
           where: { projectId: project.id, issueType: "request", planningStatus: { in: ["unplanned", "planning"] } },
           orderBy: { createdAt: "asc" },
           select: { id: true, title: true, description: true, status: true, planningStatus: true, autoApprove: true },
+        }),
+        prisma.applicationModule.findMany({
+          where: { projectId: project.id },
+          orderBy: { name: "asc" },
+          select: { id: true, name: true, kind: true, description: true, sourceRefs: true, revision: true, reviewStatus: true, reviewSummary: true, reviewedAt: true },
         }),
       ]);
       return {
@@ -115,6 +131,10 @@ export function createMcpServer(token: string) {
                   autoCloseIssues: project.autoCloseIssues,
                 },
                 manualRequests,
+                applicationModules: modules.map((module) => ({
+                  ...module,
+                  sourceRefs: JSON.parse(module.sourceRefs),
+                })),
                 existingFlows: flows.map((f) => ({
                   id: f.id,
                   name: f.name,
@@ -134,6 +154,194 @@ export function createMcpServer(token: string) {
           },
         ],
       };
+    },
+  );
+
+  server.registerTool(
+    "list_feature_graph_modules",
+    {
+      title: "List modules represented by the feature graph",
+      description:
+        "Return every feature-graph group and node for this project. Use this as the required coverage checklist when creating the application module inventory.",
+      inputSchema: {},
+    },
+    async () => {
+      const project = await getProjectForToken(token);
+      const nodes = await prisma.graphNode.findMany({
+        where: { projectId: project.id },
+        orderBy: [{ group: "asc" }, { label: "asc" }],
+        select: { key: true, label: true, kind: true, group: true, sourceRefs: true, revision: true },
+      });
+      const groups = new Map<string, typeof nodes>();
+      for (const node of nodes) {
+        const group = groups.get(node.group) ?? [];
+        group.push(node);
+        groups.set(node.group, group);
+      }
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            featureGraphModuleCount: groups.size,
+            featureGraphNodeCount: nodes.length,
+            modules: [...groups.entries()].map(([name, groupNodes]) => ({
+              name,
+              nodes: groupNodes.map((node) => ({
+                key: node.key,
+                label: node.label,
+                kind: node.kind,
+                sourceRefs: JSON.parse(node.sourceRefs),
+                revision: node.revision,
+              })),
+            })),
+          }, null, 2),
+        }],
+      };
+    },
+  );
+
+  server.registerTool(
+    "save_module_inventory",
+    {
+      title: "Save the application module inventory",
+      description:
+        "Persist a source-evidenced inventory of the application's modules before risk review. Reconcile every feature-graph module/node first, and include covered graph nodes as graph:<node-key> source references.",
+      inputSchema: {
+        revision: z.string().trim().min(1).max(200).optional(),
+        modules: z.array(z.object({
+          name: z.string().trim().min(1).max(160),
+          kind: z.string().trim().min(1).max(80).default("application"),
+          description: z.string().trim().max(2000).optional(),
+          sourceRefs: z.array(z.string().trim().min(1).max(500)).min(1).max(50),
+        })).min(1).max(200),
+      },
+    },
+    async ({ revision, modules }) => {
+      const project = await getProjectForToken(token);
+      const saved = await prisma.$transaction(async (tx) => {
+        const rows = [];
+        for (const module of modules) {
+          rows.push(await tx.applicationModule.upsert({
+            where: { projectId_name: { projectId: project.id, name: module.name } },
+            create: {
+              projectId: project.id,
+              name: module.name,
+              kind: module.kind,
+              description: module.description ?? null,
+              sourceRefs: JSON.stringify(module.sourceRefs),
+              revision: revision ?? null,
+              reviewStatus: "pending",
+              leaseUntil: null,
+              reviewedAt: null,
+              reviewSummary: null,
+            },
+            update: {
+              kind: module.kind,
+              description: module.description ?? null,
+              sourceRefs: JSON.stringify(module.sourceRefs),
+              revision: revision ?? null,
+              reviewStatus: "pending",
+              leaseUntil: null,
+              reviewedAt: null,
+              reviewSummary: null,
+            },
+          }));
+        }
+        return rows;
+      });
+      return { content: [{ type: "text", text: JSON.stringify({ ok: true, moduleCount: saved.length, modules: saved.map((m) => ({ id: m.id, name: m.name, reviewStatus: m.reviewStatus })) }) }] };
+    },
+  );
+
+  server.registerTool(
+    "claim_next_module_review",
+    {
+      title: "Claim the next application module for risk review",
+      description:
+        "Atomically claim one pending module review. Inspect its source code and report plausible source-backed risks, or complete the review when none are found.",
+      inputSchema: {},
+    },
+    async () => {
+      const project = await getProjectForToken(token);
+      const now = new Date();
+      const next = await prisma.applicationModule.findFirst({
+        where: {
+          projectId: project.id,
+          OR: [{ reviewStatus: "pending" }, { reviewStatus: "in_progress", leaseUntil: { lt: now } }],
+        },
+        orderBy: { updatedAt: "asc" },
+      });
+      if (!next) return { content: [{ type: "text", text: JSON.stringify({ module: null }) }] };
+      const leaseUntil = new Date(Date.now() + 15 * 60_000);
+      const claimed = await prisma.applicationModule.updateMany({
+        where: { id: next.id, reviewStatus: next.reviewStatus, ...(next.reviewStatus === "in_progress" ? { leaseUntil: { lt: now } } : {}) },
+        data: { reviewStatus: "in_progress", leaseUntil },
+      });
+      if (!claimed.count) return { content: [{ type: "text", text: JSON.stringify({ module: null, note: "contention, try again" }) }] };
+      return { content: [{ type: "text", text: JSON.stringify({ module: { id: next.id, name: next.name, kind: next.kind, description: next.description, sourceRefs: JSON.parse(next.sourceRefs), revision: next.revision }, leaseUntil }, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    "report_module_risk",
+    {
+      title: "Report a risk found in an application module",
+      description:
+        "Create an approval-gated issue for a plausible, source-backed module risk. Do not report generic AI concerns without evidence in this repository.",
+      inputSchema: {
+        moduleId: z.string(),
+        severity: z.enum(["critical", "high", "medium", "low"]),
+        category: z.enum(["security", "privacy", "auth", "ai-safety", "data-integrity", "reliability", "performance", "cost", "observability", "other"]),
+        confidence: z.enum(["confirmed", "likely", "plausible"]),
+        title: z.string().trim().min(1).max(200),
+        description: z.string().trim().min(1).max(12000),
+        evidence: z.string().trim().min(1).max(12000),
+        fixPrompt: z.string().trim().min(1).max(30000),
+        filePath: z.string().trim().max(500).optional(),
+        lineStart: z.number().int().optional(),
+      },
+    },
+    async (input) => {
+      const project = await getProjectForToken(token);
+      const module = await prisma.applicationModule.findFirst({ where: { id: input.moduleId, projectId: project.id } });
+      if (!module) throw new Error("Module not found for this project");
+      if (module.reviewStatus !== "in_progress") throw new Error("Claim the module before reporting risks");
+      const issue = await prisma.issue.create({
+        data: {
+          projectId: project.id,
+          moduleId: module.id,
+          severity: input.severity,
+          category: input.category,
+          title: input.title,
+          description: `${input.description}\n\nEvidence: ${input.evidence}`,
+          fixPrompt: input.fixPrompt,
+          filePath: input.filePath ?? null,
+          lineStart: input.lineStart ?? null,
+          confidence: input.confidence,
+          source: "module-review",
+          issueType: "task",
+          status: project.autoApproveIssues ? "approved" : "pending",
+        },
+      });
+      return { content: [{ type: "text", text: JSON.stringify({ issueId: issue.id, moduleId: module.id, status: issue.status, confidence: issue.confidence }) }] };
+    },
+  );
+
+  server.registerTool(
+    "complete_module_review",
+    {
+      title: "Complete an application module risk review",
+      description: "Mark a claimed module reviewed after checking its source. Include a short summary of risks found or why none were found.",
+      inputSchema: { moduleId: z.string(), summary: z.string().trim().min(1).max(5000) },
+    },
+    async ({ moduleId, summary }) => {
+      const project = await getProjectForToken(token);
+      const changed = await prisma.applicationModule.updateMany({
+        where: { id: moduleId, projectId: project.id, reviewStatus: "in_progress" },
+        data: { reviewStatus: "reviewed", reviewedAt: new Date(), leaseUntil: null, reviewSummary: summary },
+      });
+      if (!changed.count) throw new Error("Module is not claimed for review");
+      return { content: [{ type: "text", text: JSON.stringify({ ok: true, moduleId, reviewStatus: "reviewed" }) }] };
     },
   );
 

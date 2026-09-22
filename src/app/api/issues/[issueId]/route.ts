@@ -30,6 +30,7 @@ export async function GET(
       },
       parent: { select: { id: true, title: true } },
       children: { orderBy: { createdAt: "asc" } },
+      module: { select: { id: true, name: true, kind: true } },
     },
   });
   if (!issue) return NextResponse.json({ error: "not found" }, { status: 404 });

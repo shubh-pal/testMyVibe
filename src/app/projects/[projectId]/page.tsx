@@ -52,7 +52,7 @@ export default function ProjectDashboard({
     async function load() {
       try {
         const [pRes, sRes] = await Promise.all([
-          checkedFetch(`/api/projects/${projectId}`),
+          checkedFetch(`/api/projects/${projectId}?summary=1`),
           checkedFetch(`/api/projects/${projectId}/stats`),
         ]);
         if (cancelled) return;
