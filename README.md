@@ -33,10 +33,11 @@ Audits are source inspections, not browser execution. The external agent perform
 
 The AI connection page includes a copyable, tool-neutral scheduling prompt:
 
-- Every hour: discover new user flows and audit existing journeys.
+- Every hour: audit pending graph journeys and identify concrete source-backed issues.
 - Every 30 minutes: claim and fix approved issues, then submit for human review.
+- Separately, on a chosen cadence: discover pending user journeys and graph nodes.
 
-TestMyVibe does **not** run a scheduler or execute your agent. A scheduling-capable AI tool or an external scheduler must create and run these jobs. The prompt includes approval boundaries, no-overlap guidance, validation, and failure reporting. Confirm activation in the chosen scheduler.
+TestMyVibe does **not** run a scheduler or execute your agent. A scheduling-capable AI tool or an external scheduler must create and run these jobs. Use the quality-loop prompt for audits and approved fixes, and create a separate discovery job from the graph-discovery prompt so discovery cannot be mistaken for completed auditing. The prompts include approval boundaries, no-overlap guidance, validation, and failure reporting. Confirm activation in the chosen scheduler.
 
 ## Accounts and tenancy
 

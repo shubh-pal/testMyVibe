@@ -36,18 +36,48 @@ export const graphBatch = z.object({
     .max(50),
 });
 
+function uncoveredNodeKeys(
+  nodes: Array<{ key: string }>,
+  edges: Array<{ key: string; fromKey: string; toKey: string }>,
+  journeys: Array<{ edgeKeys: string }>,
+) {
+  const journeyEdges = new Set(
+    journeys.flatMap((journey) => JSON.parse(journey.edgeKeys) as string[]),
+  );
+  const covered = new Set<string>();
+  for (const edge of edges) {
+    if (journeyEdges.has(edge.key)) {
+      covered.add(edge.fromKey);
+      covered.add(edge.toKey);
+    }
+  }
+  return nodes.filter((node) => !covered.has(node.key)).map((node) => node.key);
+}
+
 export async function setupGraph(projectId: string, currentRevision?: string) {
-  const state = await prisma.graphState.upsert({
-    where: { projectId },
-    create: { projectId },
-    update: {},
-  });
-  const pendingCount = await prisma.graphJourney.count({
-    where: {
-      projectId,
-      status: { in: ["pending", "stale", "in_progress"] },
-    },
-  });
+  const [state, pendingCount, nodes, edges, journeys] = await Promise.all([
+    prisma.graphState.upsert({
+      where: { projectId },
+      create: { projectId },
+      update: {},
+    }),
+    prisma.graphJourney.count({
+      where: {
+        projectId,
+        status: { in: ["pending", "stale", "in_progress"] },
+      },
+    }),
+    prisma.graphNode.findMany({ where: { projectId }, select: { key: true } }),
+    prisma.graphEdge.findMany({
+      where: { projectId },
+      select: { key: true, fromKey: true, toKey: true },
+    }),
+    prisma.graphJourney.findMany({
+      where: { projectId },
+      select: { edgeKeys: true },
+    }),
+  ]);
+  const uncovered = uncoveredNodeKeys(nodes, edges, journeys);
   let nextAction:
     | "audit_pending"
     | "continue_discovery"
@@ -57,14 +87,21 @@ export async function setupGraph(projectId: string, currentRevision?: string) {
   if (pendingCount > 0) nextAction = "audit_pending";
   else if (
     state.discoveryStatus !== "complete" ||
-    JSON.parse(state.frontier).length
+    JSON.parse(state.frontier).length ||
+    uncovered.length
   )
     nextAction = "continue_discovery";
   else if (!currentRevision) nextAction = "inspect_revision";
   else if (state.lastAuditedRevision === currentRevision)
     nextAction = "up_to_date";
   else nextAction = "discover_changes";
-  return { ...state, pendingCount, nextAction };
+  return {
+    ...state,
+    pendingCount,
+    uncoveredNodeCount: uncovered.length,
+    uncoveredNodeKeys: uncovered.slice(0, 2000),
+    nextAction,
+  };
 }
 
 export async function saveGraphBatch(
@@ -262,6 +299,21 @@ export async function saveGraphBatch(
             ...(pathChanged ? { status: "stale" } : {}),
           },
         });
+      }
+      if (input.discoveryStatus === "complete") {
+        const currentNodes = await tx.graphNode.findMany({
+          where: { projectId },
+          select: { key: true },
+        });
+        const currentJourneys = await tx.graphJourney.findMany({
+          where: { projectId },
+          select: { edgeKeys: true },
+        });
+        const uncovered = uncoveredNodeKeys(currentNodes, edges, currentJourneys);
+        if (uncovered.length)
+          throw new Error(
+            `Complete discovery must connect every graph node to a journey; uncovered nodes: ${uncovered.slice(0, 10).join(", ")}`,
+          );
       }
       return {
         version: input.expectedVersion + 1,

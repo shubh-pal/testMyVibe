@@ -249,11 +249,11 @@ export default function GraphPage({
   );
   const graphLayout = layout(graph.nodes, graph.edges);
   const { positions, width: canvasWidth, height: canvasHeight } = graphLayout;
-  const verified = graph.journeys.filter(
-    (journey) => journey.status === "verified",
+  const coveredNodes = [...statuses.values()].filter(
+    (status) => status === "covered",
   ).length;
-  const coverage = graph.journeys.length
-    ? Math.round((verified / graph.journeys.length) * 100)
+  const coverage = graph.nodes.length
+    ? Math.round((coveredNodes / graph.nodes.length) * 100)
     : 0;
   function resetViewport() {
     setZoom(1);
@@ -474,7 +474,7 @@ export default function GraphPage({
               key={label}
               title={
                 label === "coverage"
-                  ? `${verified} of ${graph.journeys.length} journeys verified`
+                  ? `${coveredNodes} of ${graph.nodes.length} nodes covered`
                   : undefined
               }
             >

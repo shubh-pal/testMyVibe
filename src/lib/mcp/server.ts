@@ -18,7 +18,8 @@ Workflow:
    journeys until the queue is empty or the run's time budget is nearly exhausted. Never re-audit verified journeys.
 3. If nextAction is "up_to_date", stop quietly. The last completely audited commit is already the current commit.
 4. If nextAction is "discover_changes", inspect only changes between lastAuditedRevision and currentRevision. If it is
-   "continue_discovery", resume at the returned frontier. Save a bounded batch with current commit SHA and date.
+   "continue_discovery", resume at the returned frontier and repair any returned uncoveredNodeKeys by connecting those
+   nodes to source-evidenced journeys. Save a bounded batch with current commit SHA and date.
    Assign user-visible nodes to stable product features, keep labels user-facing, and connections directional.
    Only include changed graph elements so unaffected verified journeys stay verified. Create journeys only when new,
    or update a journey when its path changed. This is source inspection, never browser testing.
@@ -148,6 +149,8 @@ export function createMcpServer(token: string) {
               frontier: JSON.parse(state.frontier),
               discoveryStatus: state.discoveryStatus,
               pendingAuditCount: state.pendingCount,
+              uncoveredNodeCount: state.uncoveredNodeCount,
+              uncoveredNodeKeys: state.uncoveredNodeKeys,
               nextAction: state.nextAction,
               currentRevision: currentRevision ?? null,
               currentRevisionAt: currentRevisionAt ?? null,

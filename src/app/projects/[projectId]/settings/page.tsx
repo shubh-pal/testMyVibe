@@ -1,6 +1,10 @@
 "use client";
 import { useEffect, useState, use as usePromise } from "react";
-import { createSchedulingPrompt, formatSchedule } from "@/lib/automation";
+import {
+  createDiscoverySchedulingPrompt,
+  createSchedulingPrompt,
+  formatSchedule,
+} from "@/lib/automation";
 interface Project {
   id: string;
   name: string;
@@ -36,6 +40,7 @@ export default function SettingsPage({
   const [showToken, setShowToken] = useState(false);
   const [auditMinutes, setAuditMinutes] = useState("60");
   const [fixMinutes, setFixMinutes] = useState("30");
+  const [discoveryMinutes, setDiscoveryMinutes] = useState("60");
   useEffect(() => {
     fetch("/api/projects/" + projectId)
       .then(async (r) => {
@@ -59,11 +64,16 @@ export default function SettingsPage({
   const url = origin + "/api/mcp";
   const auditInterval = Number(auditMinutes);
   const fixInterval = Number(fixMinutes);
+  const discoveryInterval = Number(discoveryMinutes);
   const validIntervals =
     isValidInterval(auditInterval) && isValidInterval(fixInterval);
+  const validDiscoveryInterval = isValidInterval(discoveryInterval);
   const schedulingPrompt = createSchedulingPrompt(
     validIntervals ? auditInterval : 60,
     validIntervals ? fixInterval : 30,
+  );
+  const discoverySchedulingPrompt = createDiscoverySchedulingPrompt(
+    validDiscoveryInterval ? discoveryInterval : 60,
   );
   const token = showToken ? project.mcpToken : "YOUR_PROJECT_TOKEN";
   const codexConfig = `[mcp_servers.testmyvibe]
@@ -359,7 +369,7 @@ default_tools_approval_mode = "prompt"`;
               {isValidInterval(auditInterval)
                 ? formatSchedule(auditInterval)
                 : "Choose a valid interval"}{" "}
-              · discover user flows and run source audits
+              · audit pending user journeys and report concrete issues
             </p>
           </label>
           <label className="input flex flex-col gap-2">
@@ -400,6 +410,57 @@ default_tools_approval_mode = "prompt"`;
         )}
         <pre className="input whitespace-pre-wrap text-xs leading-6 max-h-96 overflow-auto">
           {schedulingPrompt}
+        </pre>
+      </section>
+      <section className="card flex flex-col gap-4">
+        <div className="flex justify-between items-start gap-3">
+          <div>
+            <h2 className="text-lg font-medium">
+              3. Schedule graph discovery
+            </h2>
+            <p className="text-neutral-400 text-sm mt-2">
+              A separate job finds new user journeys and graph nodes. It does
+              not audit journeys or report issues.
+            </p>
+          </div>
+          <button
+            className="btn-primary shrink-0"
+            disabled={!validDiscoveryInterval}
+            onClick={() =>
+              copy("discovery-schedule", discoverySchedulingPrompt)
+            }
+          >
+            {copied === "discovery-schedule" ? "Copied" : "Copy prompt"}
+          </button>
+        </div>
+        <label className="input flex flex-col gap-2 sm:w-1/2">
+          <span className="text-xs text-neutral-400">Discovery cadence</span>
+          <div className="flex items-center gap-2">
+            <span className="text-sm">Every</span>
+            <input
+              aria-label="Discovery interval in minutes"
+              className="input w-24 py-1.5 text-center"
+              type="number"
+              min={MIN_INTERVAL_MINUTES}
+              max={MAX_INTERVAL_MINUTES}
+              step={5}
+              value={discoveryMinutes}
+              onChange={(event) => {
+                if (/^\d{0,5}$/.test(event.target.value))
+                  setDiscoveryMinutes(event.target.value);
+              }}
+            />
+            <span className="text-sm">minutes</span>
+          </div>
+          <p className="text-xs text-neutral-400 mt-1">
+            {validDiscoveryInterval
+              ? formatSchedule(discoveryInterval)
+              : "Choose a valid interval"}{" "}
+            · discover pending user journeys and graph nodes
+          </p>
+        </label>
+        <pre className="input whitespace-pre-wrap text-xs leading-6 max-h-96 overflow-auto">
+          {discoverySchedulingPrompt}
         </pre>
       </section>
     </div>
